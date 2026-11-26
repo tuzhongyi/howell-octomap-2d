@@ -3,7 +3,22 @@
   width: 100%;
   height: 100%;
   min-height: 0;
+  overflow: hidden;
   background: #0b1016;
+}
+
+.octomap-2d-pgm__viewport {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  cursor: grab;
+  // 触摸上也由指针事件接管拖动/缩放，别让浏览器自己滚页面。
+  touch-action: none;
+
+  &:active {
+    cursor: grabbing;
+  }
 }
 
 .octomap-2d-pgm__canvas {
@@ -12,5 +27,9 @@
   height: 100%;
   object-fit: contain;
   image-rendering: pixelated;
-  cursor: crosshair;
+  // 变换以左上角为原点：translate 是屏幕像素，scale 只放大位图。
+  transform-origin: 0 0;
+  // 事件统一交给 viewport；画布本身不需要命中。
+  pointer-events: none;
+  will-change: transform;
 }

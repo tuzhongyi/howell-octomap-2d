@@ -7,6 +7,7 @@ import {
   OnChanges,
   Output,
   SimpleChanges,
+  computed,
   effect,
   signal,
   viewChild,
@@ -85,6 +86,7 @@ export class Octomap2dPgmComponent implements OnChanges {
   @Output() readonly pathChange = new EventEmitter<OctomapPgmPlan | null>();
 
   private readonly canvasRef = viewChild<ElementRef<HTMLCanvasElement>>('canvas');
+  private readonly viewportRef = viewChild<ElementRef<HTMLDivElement>>('viewport');
 
   /** 当前网格；`image` 为空、分辨率无效或建图失败时为空。 */
   protected readonly grid = signal<OctomapPgmGrid | null>(null);
@@ -100,6 +102,27 @@ export class Octomap2dPgmComponent implements OnChanges {
   private readonly markerSizeState = signal<number | null>(null);
   private readonly startSnapState = signal(OCTOMAP_PGM_DEFAULT_GOAL_RADIUS);
   private readonly startClearanceState = signal(OCTOMAP_PGM_DEFAULT_DOG_RADIUS);
+
+  /** 只影响显示的缩放与平移，不参与建图/寻路。 */
+  private readonly scale = signal(1);
+  private readonly translateX = signal(0);
+  private readonly translateY = signal(0);
+
+  protected readonly viewTransform = computed(
+    () =>
+      `translate(${this.translateX()}px, ${this.translateY()}px) scale(${this.scale()})`,
+  );
+
+  /** 正在按下的指针；超过阈值才算拖动，否则松开时是一次点击。 */
+  private drag: {
+    pointerId: number;
+    button: number;
+    startX: number;
+    startY: number;
+    lastX: number;
+    lastY: number;
+    moved: boolean;
+  } | null = null;
 
   constructor() {
     this.markerSizeState.set(this.markerSize);
@@ -251,6 +274,62 @@ export class Octomap2dPgmComponent implements OnChanges {
   }
 
   protected onPointerDown(event: PointerEvent): void {
+    if (event.button !== 0 && event.button !== 2) {
+      return;
+    }
+    if (!this.grid()) {
+      return;
+    }
+    this.drag = {
+      pointerId: event.pointerId,
+      button: event.button,
+      startX: event.clientX,
+      startY: event.clientY,
+      lastX: this.translateX(),
+      lastY: this.translateY(),
+      moved: false,
+    };
+    const viewport = this.viewportRef()?.nativeElement;
+    try {
+      viewport?.setPointerCapture(event.pointerId);
+    } catch {
+      // 指针已经失效时忽略；后面的 pointermove 会照常走冒泡。
+    }
+    event.preventDefault();
+  }
+
+  protected onPointerMove(event: PointerEvent): void {
+    const drag = this.drag;
+    if (!drag || event.pointerId !== drag.pointerId) {
+      return;
+    }
+    const dx = event.clientX - drag.startX;
+    const dy = event.clientY - drag.startY;
+    if (!drag.moved && Math.hypot(dx, dy) > 3) {
+      drag.moved = true;
+    }
+    if (!drag.moved) {
+      return;
+    }
+    this.translateX.set(drag.lastX + dx);
+    this.translateY.set(drag.lastY + dy);
+    event.preventDefault();
+  }
+
+  protected onPointerUp(event: PointerEvent): void {
+    const drag = this.drag;
+    if (!drag || event.pointerId !== drag.pointerId) {
+      return;
+    }
+    this.drag = null;
+    const viewport = this.viewportRef()?.nativeElement;
+    if (viewport?.hasPointerCapture(event.pointerId)) {
+      viewport.releasePointerCapture(event.pointerId);
+    }
+    // 拖动是平移，不落到起点/终点；只有没移动的单击才算点击。
+    if (drag.moved) {
+      return;
+    }
     const grid = this.grid();
     if (!grid) {
       return;
@@ -259,16 +338,46 @@ export class Octomap2dPgmComponent implements OnChanges {
     if (cell === null) {
       return;
     }
-    event.preventDefault();
-    if (event.button === 2) {
+    if (drag.button === 2) {
       this.goalCell.set(cell);
-    } else if (event.button === 0) {
-      this.startCell.set(cell);
     } else {
-      return;
+      this.startCell.set(cell);
     }
     // 端点换了，旧路线就作废；按钮仍在，用户想算再点一次。
     this.clearPlan();
+  }
+
+  protected onPointerCancel(event: PointerEvent): void {
+    if (this.drag?.pointerId !== event.pointerId) {
+      return;
+    }
+    this.drag = null;
+  }
+
+  protected onWheel(event: WheelEvent): void {
+    if (!this.grid()) {
+      return;
+    }
+    event.preventDefault();
+    const current = this.scale();
+    const factor = event.deltaY < 0 ? 1.1 : 1 / 1.1;
+    const next = Math.min(20, Math.max(0.1, current * factor));
+    if (next === current) {
+      return;
+    }
+    const viewport = this.viewportRef()?.nativeElement;
+    if (!viewport) {
+      return;
+    }
+    // 以指针为锚点：缩放前后，指针下那一点保持在原地。
+    const rect = viewport.getBoundingClientRect();
+    const vx = event.clientX - rect.left;
+    const vy = event.clientY - rect.top;
+    const px = (vx - this.translateX()) / current;
+    const py = (vy - this.translateY()) / current;
+    this.scale.set(next);
+    this.translateX.set(vx - px * next);
+    this.translateY.set(vy - py * next);
   }
 
   protected onContextMenu(event: MouseEvent): void {

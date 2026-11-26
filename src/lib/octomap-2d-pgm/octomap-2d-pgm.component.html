@@ -1,6 +1,16 @@
-<canvas
-  #canvas
-  class="octomap-2d-pgm__canvas"
+<div
+  #viewport
+  class="octomap-2d-pgm__viewport"
   (pointerdown)="onPointerDown($event)"
+  (pointermove)="onPointerMove($event)"
+  (pointerup)="onPointerUp($event)"
+  (pointercancel)="onPointerCancel($event)"
+  (wheel)="onWheel($event)"
   (contextmenu)="onContextMenu($event)"
-></canvas>
+>
+  <canvas
+    #canvas
+    class="octomap-2d-pgm__canvas"
+    [style.transform]="viewTransform()"
+  ></canvas>
+</div>
