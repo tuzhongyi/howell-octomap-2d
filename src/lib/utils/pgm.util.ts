@@ -4,7 +4,7 @@
  */
 
 /** 单通道的俯视地图图像（兼容 PGM）。 */
-export interface OctoMapProjection {
+export interface OctomapProjection {
   width: number;
   height: number;
   /** 按行主序排列的像素：{@link PGM_OCCUPIED} 或 {@link PGM_FREE}。 */
@@ -44,7 +44,7 @@ export const PGM_FREE_MIN = 250;
  * 没有这个字段，但注释行允许任意内容，看图的软件会忽略它。
  */
 export function encodePgm(
-  projection: OctoMapProjection,
+  projection: OctomapProjection,
   resolution?: number,
 ): Uint8Array<ArrayBuffer> {
   const scaleText =
@@ -64,9 +64,9 @@ export function encodePgm(
  *
  * 只认 PGM 自己的头：宽、高、最大灰度。标准头里没有比例尺（map-server 把它放在
  * 同名 YAML 里）；本仓导出时把 `resolution=` 写进了注释行，读到就放进结果的
- * {@link OctoMapProjection.resolution}，读不到就留给宿主另给。
+ * {@link OctomapProjection.resolution}，读不到就留给宿主另给。
  */
-export function decodePgm(buffer: ArrayBuffer): OctoMapProjection {
+export function decodePgm(buffer: ArrayBuffer): OctomapProjection {
   const bytes = new Uint8Array(buffer);
   let offset = 0;
   /** 头部的注释行；本仓的编码器会把比例尺写在这里。 */
@@ -120,7 +120,7 @@ export function decodePgm(buffer: ArrayBuffer): OctoMapProjection {
 
   const count = width * height;
   const data = new Uint8Array(count);
-  const result: OctoMapProjection = { width, height, data };
+  const result: OctomapProjection = { width, height, data };
   const resolution = readResolution(comments);
   if (resolution !== undefined) {
     result.resolution = resolution;

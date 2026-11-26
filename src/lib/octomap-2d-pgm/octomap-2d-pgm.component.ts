@@ -11,23 +11,23 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
-import { OctoMapProjection } from '../utils/pgm.util';
+import { OctomapProjection } from '../utils/pgm.util';
 import {
-  OCTO_MAP_PGM_DEFAULT_DOG_RADIUS,
-  OCTO_MAP_PGM_DEFAULT_GOAL_RADIUS,
-  OCTO_MAP_PGM_DEFAULT_RESOLUTION,
-  OCTO_MAP_PGM_MODE_LABELS,
-  OctoMapPgmGrid,
-  OctoMapPgmMode,
-  OctoMapPgmPlan,
+  OCTOMAP_PGM_DEFAULT_DOG_RADIUS,
+  OCTOMAP_PGM_DEFAULT_GOAL_RADIUS,
+  OCTOMAP_PGM_DEFAULT_RESOLUTION,
+  OCTOMAP_PGM_MODE_LABELS,
+  OctomapPgmGrid,
+  OctomapPgmMode,
+  OctomapPgmPlan,
 } from './octomap-2d-pgm.model';
 import { buildPgmGrid, pgmCellToWorld, planPgmPath } from './octomap-2d-pgm-grid';
 
 /**
  * 在一张 PGM 地图上做二维寻路。
  *
- * 输入是一张已经解码好的灰度图 {@link OctoMapProjection}，加一格多少米。建图、膨胀、
- * A*、拉直全在这个目录里，不碰 Three.js、不碰 octo-map 的三维控制器；宿主只负责
+ * 输入是一张已经解码好的灰度图 {@link OctomapProjection}，加一格多少米。建图、膨胀、
+ * A*、拉直全在这个目录里，不碰 Three.js、不碰 octomap 的三维控制器；宿主只负责
  * 把文件读成像素。这样同一份算法既能给 `/system/pgm` 的二维页用，也能在测试里直接
  * `new` 一个网格跑。
  *
@@ -48,16 +48,16 @@ import { buildPgmGrid, pgmCellToWorld, planPgmPath } from './octomap-2d-pgm-grid
 })
 export class Octomap2dPgmComponent implements OnChanges {
   /** 要寻路的 PGM 图像；为空时只显示一句提示。 */
-  @Input() image: OctoMapProjection | null = null;
+  @Input() image: OctomapProjection | null = null;
 
   /** 一格对应多少米。PGM 文件头不带比例尺，只能由宿主给。 */
-  @Input() resolution: number = OCTO_MAP_PGM_DEFAULT_RESOLUTION;
+  @Input() resolution: number = OCTOMAP_PGM_DEFAULT_RESOLUTION;
 
   /** 小狗碰撞半径（米），决定障碍往外膨胀多少。 */
-  @Input() dogRadius: number = OCTO_MAP_PGM_DEFAULT_DOG_RADIUS;
+  @Input() dogRadius: number = OCTOMAP_PGM_DEFAULT_DOG_RADIUS;
 
   /** 终点范围（米）：点中的格子不可通行时，最多吸附这么远。 */
-  @Input() goalRadius: number = OCTO_MAP_PGM_DEFAULT_GOAL_RADIUS;
+  @Input() goalRadius: number = OCTOMAP_PGM_DEFAULT_GOAL_RADIUS;
 
   /**
    * 初始通行口径。切换之后由组件自己记（并发出 {@link modeChange}）；父组件再改
@@ -66,40 +66,40 @@ export class Octomap2dPgmComponent implements OnChanges {
    * 默认「黑格可走」，与本仓导出的 PGM 对齐：那里的黑 = 该列有点，正是小狗要走的
    * 地面；从 map-server 换来、墙画成黑色的地图在工具条上切到「白格可走」即可。
    */
-  @Input() mode: OctoMapPgmMode = 'occupiedWalkable';
+  @Input() mode: OctomapPgmMode = 'occupiedWalkable';
 
   /** 用户切换通行口径时发出。 */
-  @Output() readonly modeChange = new EventEmitter<OctoMapPgmMode>();
+  @Output() readonly modeChange = new EventEmitter<OctomapPgmMode>();
 
   /** 每次「开始寻址」或清除时发出，供宿主显示或转交。 */
-  @Output() readonly pathChange = new EventEmitter<OctoMapPgmPlan | null>();
+  @Output() readonly pathChange = new EventEmitter<OctomapPgmPlan | null>();
 
   private readonly canvasRef = viewChild<ElementRef<HTMLCanvasElement>>('canvas');
 
   /** 当前通行口径。输入只是初值，选择器改的是这个。 */
-  protected readonly activeMode = signal<OctoMapPgmMode>('occupiedWalkable');
+  protected readonly activeMode = signal<OctomapPgmMode>('occupiedWalkable');
 
   /** 当前网格；`image` 为空、分辨率无效或建图失败时为空。 */
-  protected readonly grid = signal<OctoMapPgmGrid | null>(null);
+  protected readonly grid = signal<OctomapPgmGrid | null>(null);
 
   /** 用户点中的起点 / 终点格（吸附前的原始格）。 */
   private readonly startCell = signal<number | null>(null);
   private readonly goalCell = signal<number | null>(null);
 
   /** 最近一次「开始寻址」的结果；null 表示还没算，或端点 / 参数已经改过。 */
-  protected readonly plan = signal<OctoMapPgmPlan | null>(null);
+  protected readonly plan = signal<OctomapPgmPlan | null>(null);
 
   /** 起点圆点半径（格）。只影响画出来的标记，不参与寻路。 */
   protected readonly markerSize = signal(10);
 
   /** 起点吸附范围（米）：点中的起点不可走时，最多找这么远。默认跟终点范围一致。 */
-  protected readonly startSnapRadius = signal(OCTO_MAP_PGM_DEFAULT_GOAL_RADIUS);
+  protected readonly startSnapRadius = signal(OCTOMAP_PGM_DEFAULT_GOAL_RADIUS);
 
   /**
    * 起点要求的最小净空（米）。比建图时的碰撞半径更严时，起点会被推到离障碍更远的
    * 格子上；小于等于 `dogRadius` 时不生效（路线本身仍按碰撞半径膨胀）。
    */
-  protected readonly startClearance = signal(OCTO_MAP_PGM_DEFAULT_DOG_RADIUS);
+  protected readonly startClearance = signal(OCTOMAP_PGM_DEFAULT_DOG_RADIUS);
 
   /** 面板里的值一旦被用户改过，就不要再被宿主的新输入或自动默认值覆盖。 */
   private startRadiusTouched = false;
@@ -107,8 +107,8 @@ export class Octomap2dPgmComponent implements OnChanges {
   private markerTouched = false;
 
   protected readonly modeOptions = (
-    Object.keys(OCTO_MAP_PGM_MODE_LABELS) as OctoMapPgmMode[]
-  ).map((value) => ({ value, ...OCTO_MAP_PGM_MODE_LABELS[value] }));
+    Object.keys(OCTOMAP_PGM_MODE_LABELS) as OctomapPgmMode[]
+  ).map((value) => ({ value, ...OCTOMAP_PGM_MODE_LABELS[value] }));
 
   /** 表单事件只放需要从 DOM 上取值的处理器。 */
   protected readonly on = {
@@ -170,7 +170,7 @@ export class Octomap2dPgmComponent implements OnChanges {
 
   /** 当前口径的说明，显示在图例旁边。 */
   protected modeHint(): string {
-    return OCTO_MAP_PGM_MODE_LABELS[this.activeMode()].hint;
+    return OCTOMAP_PGM_MODE_LABELS[this.activeMode()].hint;
   }
 
   /** 网格尺寸与分辨率，显示在工具条上。 */
@@ -242,7 +242,7 @@ export class Octomap2dPgmComponent implements OnChanges {
   }
 
   protected setMode(value: string): void {
-    const mode = value as OctoMapPgmMode;
+    const mode = value as OctomapPgmMode;
     if (mode === this.activeMode()) {
       return;
     }
@@ -347,7 +347,7 @@ export class Octomap2dPgmComponent implements OnChanges {
   }
 
   /** 走不通时的一句话：最远到哪、还差多远、残段多长。 */
-  private unreachableText(grid: OctoMapPgmGrid, plan: OctoMapPgmPlan): string {
+  private unreachableText(grid: OctomapPgmGrid, plan: OctomapPgmPlan): string {
     if (plan.stuckCell === null || plan.goalCell === null) {
       return '走不通：两点之间没有可行路线（障碍或碰撞膨胀把路封住了）。';
     }
@@ -362,7 +362,7 @@ export class Octomap2dPgmComponent implements OnChanges {
   }
 
   /** 指针位置 → 网格格索引；落在画布之外返回 null。 */
-  private cellFromEvent(event: PointerEvent, grid: OctoMapPgmGrid): number | null {
+  private cellFromEvent(event: PointerEvent, grid: OctomapPgmGrid): number | null {
     const canvas = this.canvasRef()?.nativeElement;
     if (!canvas) {
       return null;
@@ -514,7 +514,7 @@ export class Octomap2dPgmComponent implements OnChanges {
 }
 
 /** 「起点大小」的自动值：短边的 1/120，与原来固定圆点的观感一致。 */
-function autoMarkerSize(grid: OctoMapPgmGrid): number {
+function autoMarkerSize(grid: OctomapPgmGrid): number {
   return Math.max(1, Math.round(Math.min(grid.width, grid.height) / 120));
 }
 
@@ -531,13 +531,13 @@ function readNumber(event: Event, fallback: number, min: number): number {
 
 /** 格索引序列 → 画布上的格心坐标（1 格 = 1 像素）。 */
 function cellPoints(
-  grid: OctoMapPgmGrid,
+  grid: OctomapPgmGrid,
   cells: readonly number[],
 ): { x: number; y: number }[] {
   return cells.map((cell) => cellCenter(grid, cell));
 }
 
-function cellCenter(grid: OctoMapPgmGrid, cell: number): { x: number; y: number } {
+function cellCenter(grid: OctomapPgmGrid, cell: number): { x: number; y: number } {
   return {
     x: (cell % grid.width) + 0.5,
     y: ((cell / grid.width) | 0) + 0.5,
@@ -565,7 +565,7 @@ function tracePath(
  */
 function drawMarker(
   context: CanvasRenderingContext2D,
-  grid: OctoMapPgmGrid,
+  grid: OctomapPgmGrid,
   cell: number,
   color: string,
   footprintRadius: number,
@@ -604,7 +604,7 @@ function drawMarker(
 /** 走不通时，在卡住的格上画一个红叉（白色描边垫底）。 */
 function drawStuckCross(
   context: CanvasRenderingContext2D,
-  grid: OctoMapPgmGrid,
+  grid: OctomapPgmGrid,
   cell: number,
 ): void {
   const { x, y } = cellCenter(grid, cell);

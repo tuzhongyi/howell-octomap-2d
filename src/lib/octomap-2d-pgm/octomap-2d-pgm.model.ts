@@ -13,11 +13,11 @@
  * 原先还有一档「按高度分带」，它需要每个像素的最高点；PGM 不带高度，于是二维页
  * 只保留这两档。高度分带仍留在三维寻路那边。
  */
-export type OctoMapPgmMode = 'occupiedWalkable' | 'freeWalkable';
+export type OctomapPgmMode = 'occupiedWalkable' | 'freeWalkable';
 
 /** 两档口径在界面上的短名与说明。 */
-export const OCTO_MAP_PGM_MODE_LABELS: Readonly<
-  Record<OctoMapPgmMode, { label: string; hint: string }>
+export const OCTOMAP_PGM_MODE_LABELS: Readonly<
+  Record<OctomapPgmMode, { label: string; hint: string }>
 > = {
   occupiedWalkable: {
     label: '黑格可走',
@@ -30,11 +30,11 @@ export const OCTO_MAP_PGM_MODE_LABELS: Readonly<
 };
 
 /** PGM 文件头里没有比例尺，一格按多少米算由宿主指定；这是默认值。 */
-export const OCTO_MAP_PGM_DEFAULT_RESOLUTION = 0.05;
+export const OCTOMAP_PGM_DEFAULT_RESOLUTION = 0.05;
 
 /** 建一张二维导航网格需要的参数。 */
-export interface OctoMapPgmPlanOptions {
-  mode: OctoMapPgmMode;
+export interface OctomapPgmPlanOptions {
+  mode: OctomapPgmMode;
   /**
    * 小狗的碰撞半径（米），与三维寻路共用设置面板里那一项。
    *
@@ -47,7 +47,7 @@ export interface OctoMapPgmPlanOptions {
 }
 
 /** 一张二维导航网格。行列按图像方向：`row = 0` 是 Z 最大的一侧。 */
-export interface OctoMapPgmGrid {
+export interface OctomapPgmGrid {
   width: number;
   height: number;
   /** 一格多宽（世界单位）。图像被降采样时已经乘过倍数。 */
@@ -66,17 +66,17 @@ export interface OctoMapPgmGrid {
 }
 
 /** 规划成功后的路径。 */
-export interface OctoMapPgmPath {
+export interface OctomapPgmPath {
   /** 拉直后的格索引（`row * width + col`），首尾是两个吸附后的端点。 */
   cells: number[];
-  /** 与 {@link cells} 一一对应的世界坐标，Y 取 {@link OctoMapPgmGrid.groundLevel}。 */
+  /** 与 {@link cells} 一一对应的世界坐标，Y 取 {@link OctomapPgmGrid.groundLevel}。 */
   world: [number, number, number][];
   /** 折线总长（米）。 */
   length: number;
 }
 
 /** 规划失败的原因。 */
-export type OctoMapPgmFailure =
+export type OctomapPgmFailure =
   | 'noStart'
   | 'noGoal'
   | 'blockedStart'
@@ -84,9 +84,9 @@ export type OctoMapPgmFailure =
   | 'unreachable';
 
 /** 一次规划的完整结果。 */
-export interface OctoMapPgmPlan {
-  path: OctoMapPgmPath | null;
-  reason: OctoMapPgmFailure | null;
+export interface OctomapPgmPlan {
+  path: OctomapPgmPath | null;
+  reason: OctomapPgmFailure | null;
   /** 吸附后的起点格；没点过或格子为空时为 null。 */
   startCell: number | null;
   goalCell: number | null;
@@ -101,7 +101,7 @@ export interface OctoMapPgmPlan {
    */
   stuckCell: number | null;
   /** 走不通时：从起点到 {@link stuckCell} 的残段（已拉直）；其他情况为 null。 */
-  partialPath: OctoMapPgmPath | null;
+  partialPath: OctomapPgmPath | null;
 }
 
 /**
@@ -109,11 +109,11 @@ export interface OctoMapPgmPlan {
  *
  * 二维库不依赖三维库，所以这里保留与三维默认设置相同的数值（0.25 m）。
  */
-export const OCTO_MAP_PGM_DEFAULT_DOG_RADIUS = 0.25;
+export const OCTOMAP_PGM_DEFAULT_DOG_RADIUS = 0.25;
 
 /**
  * 终点范围的默认值（米）。
  *
  * 与三维默认设置相同（0.5 m）；起点吸附范围默认也取这个值。
  */
-export const OCTO_MAP_PGM_DEFAULT_GOAL_RADIUS = 0.5;
+export const OCTOMAP_PGM_DEFAULT_GOAL_RADIUS = 0.5;

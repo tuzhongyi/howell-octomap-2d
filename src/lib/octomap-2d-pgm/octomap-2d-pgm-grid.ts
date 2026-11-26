@@ -1,9 +1,9 @@
-import { OctoMapProjection, PGM_DARK_MAX, PGM_FREE_MIN } from '../utils/pgm.util';
+import { OctomapProjection, PGM_DARK_MAX, PGM_FREE_MIN } from '../utils/pgm.util';
 import {
-  OctoMapPgmGrid,
-  OctoMapPgmPath,
-  OctoMapPgmPlan,
-  OctoMapPgmPlanOptions,
+  OctomapPgmGrid,
+  OctomapPgmPath,
+  OctomapPgmPlan,
+  OctomapPgmPlanOptions,
 } from './octomap-2d-pgm.model';
 
 /**
@@ -94,9 +94,9 @@ const MAX_PGM_CELLS = 4_000_000;
  * `blocked` 的边界大致落在真实障碍面上，而不是一律偏保守或偏激进。
  */
 export function buildPgmGrid(
-  image: OctoMapProjection,
-  options: OctoMapPgmPlanOptions,
-): OctoMapPgmGrid {
+  image: OctomapProjection,
+  options: OctomapPgmPlanOptions,
+): OctomapPgmGrid {
   const scale = downsampleScale(image.width, image.height);
   const resolution = options.resolution * scale;
 
@@ -237,13 +237,13 @@ export function inflateBlocked(
  * 「走到哪里走不通」画出来。
  */
 export function planPgmPath(
-  grid: OctoMapPgmGrid,
+  grid: OctomapPgmGrid,
   start: number | null,
   goal: number | null,
   goalRadius: number,
   startRadius: number = goalRadius,
   startClearance: number | null = null,
-): OctoMapPgmPlan {
+): OctomapPgmPlan {
   if (start === null || goal === null) {
     return {
       path: null,
@@ -326,7 +326,7 @@ export function planPgmPath(
 }
 
 /** 一格序列 → 世界坐标折线，顺带量总长。 */
-function pathOf(grid: OctoMapPgmGrid, cells: number[]): OctoMapPgmPath {
+function pathOf(grid: OctomapPgmGrid, cells: number[]): OctomapPgmPath {
   const world = cells.map((cell) => pgmCellToWorld(grid, cell));
   let length = 0;
   for (let i = 1; i < world.length; i++) {
@@ -348,7 +348,7 @@ function pathOf(grid: OctoMapPgmGrid, cells: number[]): OctoMapPgmPath {
  * 路线。
  */
 export function snapToFree(
-  grid: OctoMapPgmGrid,
+  grid: OctomapPgmGrid,
   cell: number,
   maxCells: number,
   blocked: Uint8Array = grid.blocked,
@@ -417,7 +417,7 @@ export interface PgmSearchResult {
  * 画面上那条斜线正好穿过障碍的角，狗实际上过不去。
  */
 export function searchPgmPath(
-  grid: OctoMapPgmGrid,
+  grid: OctomapPgmGrid,
   start: number,
   goal: number,
 ): PgmSearchResult {
@@ -508,7 +508,7 @@ export function searchPgmPath(
 
 /** 只关心「有没有路」的旧入口。 */
 export function findPgmPath(
-  grid: OctoMapPgmGrid,
+  grid: OctomapPgmGrid,
   start: number,
   goal: number,
 ): number[] | null {
@@ -539,7 +539,7 @@ function chainFromStart(
  * 于是折线会带出左右翻号的锯齿。拉直不改变「能不能走」——它只删掉中间那些本来
  * 就落在同一条无碰直线上的顶点——但会让小狗少拐很多次头。
  */
-export function smoothPgmPath(grid: OctoMapPgmGrid, cells: number[]): number[] {
+export function smoothPgmPath(grid: OctomapPgmGrid, cells: number[]): number[] {
   if (cells.length <= 2) {
     return cells;
   }
@@ -560,7 +560,7 @@ export function smoothPgmPath(grid: OctoMapPgmGrid, cells: number[]): number[] {
 }
 
 /** 两格心之间的直线是否整段可通行（含两端）。 */
-function lineClear(grid: OctoMapPgmGrid, a: number, b: number): boolean {
+function lineClear(grid: OctomapPgmGrid, a: number, b: number): boolean {
   const ac = a % grid.width;
   const ar = (a / grid.width) | 0;
   const bc = b % grid.width;
@@ -591,7 +591,7 @@ function lineClear(grid: OctoMapPgmGrid, a: number, b: number): boolean {
  * 平面上。
  */
 export function pgmCellToWorld(
-  grid: OctoMapPgmGrid,
+  grid: OctomapPgmGrid,
   cell: number,
 ): [number, number, number] {
   const col = cell % grid.width;
@@ -610,7 +610,7 @@ export function pgmCellToWorld(
  * 二维图上时，也必须遵守「第 0 行是 Z 最大」这一条。
  */
 export function pgmWorldToCell(
-  grid: OctoMapPgmGrid,
+  grid: OctomapPgmGrid,
   x: number,
   z: number,
 ): number | null {
