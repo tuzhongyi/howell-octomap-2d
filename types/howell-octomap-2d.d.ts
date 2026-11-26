@@ -1,5 +1,5 @@
 import * as _angular_core from '@angular/core';
-import { OnChanges, EventEmitter, SimpleChanges } from '@angular/core';
+import { OnChanges, OnDestroy, EventEmitter, SimpleChanges } from '@angular/core';
 
 /**
  * 俯视地图的 PGM 编解码器：写出的是二进制 (P5)，读入兼容 P2 / P5，灰度使用
@@ -197,7 +197,7 @@ interface OctomapPgmViewState {
  * 清掉，让用户知道该再点一次。走不通时不只是报错：A* 记下能走到的最远处，画布会标出
  * 卡在哪一格。
  */
-declare class Octomap2dPgmComponent implements OnChanges {
+declare class Octomap2dPgmComponent implements OnChanges, OnDestroy {
     /** 要寻路的 PGM 图像；为空时只显示一句提示。 */
     image: OctomapProjection | null;
     /** 一格对应多少米。PGM 文件头不带比例尺，只能由宿主给。 */
@@ -222,8 +222,20 @@ declare class Octomap2dPgmComponent implements OnChanges {
      * 格子上；小于等于 `dogRadius` 时不生效（路线本身仍按碰撞半径膨胀）。
      */
     startClearance: number;
+    /** 是否允许拖动平移。关掉后单击仍可设起点/终点，拖动不会移动画布。 */
+    allowPan: boolean;
+    /** 是否允许滚轮缩放。关掉后滚轮交给页面滚动。 */
+    allowZoom: boolean;
+    /** 视口背景色；默认透明，宿主的背景会透出来。 */
+    backgroundColor: string;
+    /** 起点标记图片（URL / data URL）；为空或加载失败时用默认绿色圆点。 */
+    startImage: string | null;
+    /** 终点标记图片；为空或加载失败时用默认橙色圆点。 */
+    goalImage: string | null;
     /** 每次「开始寻址」或清除时发出，供宿主显示或转交。 */
     readonly pathChange: EventEmitter<OctomapPgmPlan | null>;
+    /** 寻路完成时发出世界坐标路径；清除或走不通时发出 null。 */
+    readonly pathComputed: EventEmitter<OctomapPgmPath | null>;
     private readonly canvasRef;
     private readonly viewportRef;
     /** 当前网格；`image` 为空、分辨率无效或建图失败时为空。 */
@@ -244,8 +256,20 @@ declare class Octomap2dPgmComponent implements OnChanges {
     protected readonly viewTransform: _angular_core.Signal<string>;
     /** 正在按下的指针；超过阈值才算拖动，否则松开时是一次点击。 */
     private drag;
+    /** 外部标记图；加载成功后替换默认圆点。 */
+    private startImageEl;
+    private goalImageEl;
+    private imageLoadToken;
     constructor();
     ngOnChanges(changes: SimpleChanges): void;
+    ngOnDestroy(): void;
+    /**
+     * 加载外部起点/终点图。
+     *
+     * 先清空旧图并立即重绘（回到默认形状），加载成功后再重绘；加载失败保持默认。
+     * `token` 防住「换了图之后，上一张图才加载完」的竞态。
+     */
+    private loadMarkerImages;
     /** 网格尺寸与分辨率，显示在工具条上。 */
     protected gridInfo(): string | null;
     /** 起点坐标。算过之后显示实际落脚点（吸附后的），否则显示点中的位置。 */
@@ -290,7 +314,7 @@ declare class Octomap2dPgmComponent implements OnChanges {
      */
     private draw;
     static ɵfac: _angular_core.ɵɵFactoryDeclaration<Octomap2dPgmComponent, never>;
-    static ɵcmp: _angular_core.ɵɵComponentDeclaration<Octomap2dPgmComponent, "howell-octomap-2d-pgm", never, { "image": { "alias": "image"; "required": false; }; "resolution": { "alias": "resolution"; "required": false; }; "dogRadius": { "alias": "dogRadius"; "required": false; }; "goalRadius": { "alias": "goalRadius"; "required": false; }; "mode": { "alias": "mode"; "required": false; }; "markerSize": { "alias": "markerSize"; "required": false; }; "startSnapRadius": { "alias": "startSnapRadius"; "required": false; }; "startClearance": { "alias": "startClearance"; "required": false; }; }, { "pathChange": "pathChange"; }, never, never, true, never>;
+    static ɵcmp: _angular_core.ɵɵComponentDeclaration<Octomap2dPgmComponent, "howell-octomap-2d-pgm", never, { "image": { "alias": "image"; "required": false; }; "resolution": { "alias": "resolution"; "required": false; }; "dogRadius": { "alias": "dogRadius"; "required": false; }; "goalRadius": { "alias": "goalRadius"; "required": false; }; "mode": { "alias": "mode"; "required": false; }; "markerSize": { "alias": "markerSize"; "required": false; }; "startSnapRadius": { "alias": "startSnapRadius"; "required": false; }; "startClearance": { "alias": "startClearance"; "required": false; }; "allowPan": { "alias": "allowPan"; "required": false; }; "allowZoom": { "alias": "allowZoom"; "required": false; }; "backgroundColor": { "alias": "backgroundColor"; "required": false; }; "startImage": { "alias": "startImage"; "required": false; }; "goalImage": { "alias": "goalImage"; "required": false; }; }, { "pathChange": "pathChange"; "pathComputed": "pathComputed"; }, never, never, true, never>;
 }
 
 /**

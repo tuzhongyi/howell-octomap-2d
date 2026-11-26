@@ -780,8 +780,20 @@ class Octomap2dPgmComponent {
      * 格子上；小于等于 `dogRadius` 时不生效（路线本身仍按碰撞半径膨胀）。
      */
     startClearance = OCTOMAP_PGM_DEFAULT_DOG_RADIUS;
+    /** 是否允许拖动平移。关掉后单击仍可设起点/终点，拖动不会移动画布。 */
+    allowPan = true;
+    /** 是否允许滚轮缩放。关掉后滚轮交给页面滚动。 */
+    allowZoom = true;
+    /** 视口背景色；默认透明，宿主的背景会透出来。 */
+    backgroundColor = 'transparent';
+    /** 起点标记图片（URL / data URL）；为空或加载失败时用默认绿色圆点。 */
+    startImage = null;
+    /** 终点标记图片；为空或加载失败时用默认橙色圆点。 */
+    goalImage = null;
     /** 每次「开始寻址」或清除时发出，供宿主显示或转交。 */
     pathChange = new EventEmitter();
+    /** 寻路完成时发出世界坐标路径；清除或走不通时发出 null。 */
+    pathComputed = new EventEmitter();
     canvasRef = viewChild('canvas', ...(ngDevMode ? [{ debugName: "canvasRef" }] : /* istanbul ignore next */ []));
     viewportRef = viewChild('viewport', ...(ngDevMode ? [{ debugName: "viewportRef" }] : /* istanbul ignore next */ []));
     /** 当前网格；`image` 为空、分辨率无效或建图失败时为空。 */
@@ -802,6 +814,10 @@ class Octomap2dPgmComponent {
     viewTransform = computed(() => `translate(${this.translateX()}px, ${this.translateY()}px) scale(${this.scale()})`, ...(ngDevMode ? [{ debugName: "viewTransform" }] : /* istanbul ignore next */ []));
     /** 正在按下的指针；超过阈值才算拖动，否则松开时是一次点击。 */
     drag = null;
+    /** 外部标记图；加载成功后替换默认圆点。 */
+    startImageEl = null;
+    goalImageEl = null;
+    imageLoadToken = 0;
     constructor() {
         this.markerSizeState.set(this.markerSize);
         this.startSnapState.set(this.startSnapRadius);
@@ -834,9 +850,54 @@ class Octomap2dPgmComponent {
         if (changes['markerSize']) {
             this.markerSizeState.set(this.markerSize);
         }
+        if (changes['startImage'] || changes['goalImage']) {
+            this.loadMarkerImages();
+        }
         if (rebuild) {
             this.rebuild();
         }
+    }
+    ngOnDestroy() {
+        this.imageLoadToken++;
+    }
+    /**
+     * 加载外部起点/终点图。
+     *
+     * 先清空旧图并立即重绘（回到默认形状），加载成功后再重绘；加载失败保持默认。
+     * `token` 防住「换了图之后，上一张图才加载完」的竞态。
+     */
+    loadMarkerImages() {
+        const token = ++this.imageLoadToken;
+        this.startImageEl = null;
+        this.goalImageEl = null;
+        this.draw();
+        const load = (url, assign) => {
+            if (!url) {
+                return;
+            }
+            const image = new Image();
+            image.onload = () => {
+                if (token !== this.imageLoadToken) {
+                    return;
+                }
+                assign(image);
+                this.draw();
+            };
+            image.onerror = () => {
+                if (token !== this.imageLoadToken) {
+                    return;
+                }
+                // 加载失败就继续用默认形状。
+                this.draw();
+            };
+            image.src = url;
+        };
+        load(this.startImage, (image) => {
+            this.startImageEl = image;
+        });
+        load(this.goalImage, (image) => {
+            this.goalImageEl = image;
+        });
     }
     /** 网格尺寸与分辨率，显示在工具条上。 */
     gridInfo() {
@@ -928,6 +989,7 @@ class Octomap2dPgmComponent {
         const plan = planPgmPath(grid, this.startCell(), this.goalCell(), this.goalRadius, this.startSnapState(), this.startClearanceState());
         this.plan.set(plan);
         this.pathChange.emit(plan);
+        this.pathComputed.emit(plan.path);
     }
     clearMarks() {
         this.startCell.set(null);
@@ -969,7 +1031,8 @@ class Octomap2dPgmComponent {
         if (!drag.moved && Math.hypot(dx, dy) > 3) {
             drag.moved = true;
         }
-        if (!drag.moved) {
+        if (!drag.moved || !this.allowPan) {
+            // 拖动开关关掉时仍然记 moved：拖一下不会误落成一次点击。
             return;
         }
         this.translateX.set(drag.lastX + dx);
@@ -1014,7 +1077,7 @@ class Octomap2dPgmComponent {
         this.drag = null;
     }
     onWheel(event) {
-        if (!this.grid()) {
+        if (!this.allowZoom || !this.grid()) {
             return;
         }
         event.preventDefault();
@@ -1065,6 +1128,7 @@ class Octomap2dPgmComponent {
         }
         this.plan.set(null);
         this.pathChange.emit(null);
+        this.pathComputed.emit(null);
     }
     /** 格索引 → 面板上的 `(x, z)`；没有格或没有网格时显示「未设置」。 */
     coordText(cell) {
@@ -1214,22 +1278,37 @@ class Octomap2dPgmComponent {
         // 任何反馈；这里以用户原始点中的格为准，吸附成功时仍画在路径真正的落点上。
         const start = this.startCell();
         const goal = this.goalCell();
+        const markerSize = this.markerSizeState() ?? autoMarkerSize(grid);
         if (start !== null) {
-            drawMarker(context, grid, plan?.startCell ?? start, '#16a34a', this.startClearanceState(), this.markerSizeState() ?? autoMarkerSize(grid));
+            const cell = plan?.startCell ?? start;
+            if (this.startImageEl) {
+                // 外部图替换绿色圆点，但碰撞足迹圈仍然画：那圈表示的是狗半径，不是标记。
+                drawFootprint(context, grid, cell, this.startClearanceState());
+                drawMarkerImage(context, grid, cell, this.startImageEl, markerSize);
+            }
+            else {
+                drawMarker(context, grid, cell, '#16a34a', this.startClearanceState(), markerSize);
+            }
         }
         if (goal !== null) {
-            drawMarker(context, grid, plan?.goalCell ?? goal, '#f59e0b', 0);
+            const cell = plan?.goalCell ?? goal;
+            if (this.goalImageEl) {
+                drawMarkerImage(context, grid, cell, this.goalImageEl, markerSize);
+            }
+            else {
+                drawMarker(context, grid, cell, '#f59e0b', 0);
+            }
         }
         if (plan && plan.stuckCell !== null) {
             drawStuckCross(context, grid, plan.stuckCell);
         }
     }
     static ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "21.2.26", ngImport: i0, type: Octomap2dPgmComponent, deps: [], target: i0.ɵɵFactoryTarget.Component });
-    static ɵcmp = i0.ɵɵngDeclareComponent({ minVersion: "17.2.0", version: "21.2.26", type: Octomap2dPgmComponent, isStandalone: true, selector: "howell-octomap-2d-pgm", inputs: { image: "image", resolution: "resolution", dogRadius: "dogRadius", goalRadius: "goalRadius", mode: "mode", markerSize: "markerSize", startSnapRadius: "startSnapRadius", startClearance: "startClearance" }, outputs: { pathChange: "pathChange" }, viewQueries: [{ propertyName: "canvasRef", first: true, predicate: ["canvas"], descendants: true, isSignal: true }, { propertyName: "viewportRef", first: true, predicate: ["viewport"], descendants: true, isSignal: true }], usesOnChanges: true, ngImport: i0, template: "<div\n  #viewport\n  class=\"octomap-2d-pgm__viewport\"\n  (pointerdown)=\"onPointerDown($event)\"\n  (pointermove)=\"onPointerMove($event)\"\n  (pointerup)=\"onPointerUp($event)\"\n  (pointercancel)=\"onPointerCancel($event)\"\n  (wheel)=\"onWheel($event)\"\n  (contextmenu)=\"onContextMenu($event)\"\n>\n  <canvas\n    #canvas\n    class=\"octomap-2d-pgm__canvas\"\n    [style.transform]=\"viewTransform()\"\n  ></canvas>\n</div>\n", styles: [":host{display:block;width:100%;height:100%;min-height:0;overflow:hidden;background:#0b1016}.octomap-2d-pgm__viewport{position:relative;width:100%;height:100%;overflow:hidden;cursor:grab;touch-action:none}.octomap-2d-pgm__viewport:active{cursor:grabbing}.octomap-2d-pgm__canvas{display:block;width:100%;height:100%;object-fit:contain;image-rendering:pixelated;transform-origin:0 0;pointer-events:none;will-change:transform}\n"], changeDetection: i0.ChangeDetectionStrategy.OnPush });
+    static ɵcmp = i0.ɵɵngDeclareComponent({ minVersion: "17.2.0", version: "21.2.26", type: Octomap2dPgmComponent, isStandalone: true, selector: "howell-octomap-2d-pgm", inputs: { image: "image", resolution: "resolution", dogRadius: "dogRadius", goalRadius: "goalRadius", mode: "mode", markerSize: "markerSize", startSnapRadius: "startSnapRadius", startClearance: "startClearance", allowPan: "allowPan", allowZoom: "allowZoom", backgroundColor: "backgroundColor", startImage: "startImage", goalImage: "goalImage" }, outputs: { pathChange: "pathChange", pathComputed: "pathComputed" }, viewQueries: [{ propertyName: "canvasRef", first: true, predicate: ["canvas"], descendants: true, isSignal: true }, { propertyName: "viewportRef", first: true, predicate: ["viewport"], descendants: true, isSignal: true }], usesOnChanges: true, ngImport: i0, template: "<div\n  #viewport\n  class=\"octomap-2d-pgm__viewport\"\n  [style.background]=\"backgroundColor\"\n  (pointerdown)=\"onPointerDown($event)\"\n  (pointermove)=\"onPointerMove($event)\"\n  (pointerup)=\"onPointerUp($event)\"\n  (pointercancel)=\"onPointerCancel($event)\"\n  (wheel)=\"onWheel($event)\"\n  (contextmenu)=\"onContextMenu($event)\"\n>\n  <canvas\n    #canvas\n    class=\"octomap-2d-pgm__canvas\"\n    [style.transform]=\"viewTransform()\"\n  ></canvas>\n</div>\n", styles: [":host{display:block;width:100%;height:100%;min-height:0;overflow:hidden}.octomap-2d-pgm__viewport{position:relative;width:100%;height:100%;overflow:hidden;cursor:grab;touch-action:none}.octomap-2d-pgm__viewport:active{cursor:grabbing}.octomap-2d-pgm__canvas{display:block;width:100%;height:100%;object-fit:contain;image-rendering:pixelated;transform-origin:0 0;pointer-events:none;will-change:transform}\n"], changeDetection: i0.ChangeDetectionStrategy.OnPush });
 }
 i0.ɵɵngDeclareClassMetadata({ minVersion: "12.0.0", version: "21.2.26", ngImport: i0, type: Octomap2dPgmComponent, decorators: [{
             type: Component,
-            args: [{ selector: 'howell-octomap-2d-pgm', imports: [], changeDetection: ChangeDetectionStrategy.OnPush, template: "<div\n  #viewport\n  class=\"octomap-2d-pgm__viewport\"\n  (pointerdown)=\"onPointerDown($event)\"\n  (pointermove)=\"onPointerMove($event)\"\n  (pointerup)=\"onPointerUp($event)\"\n  (pointercancel)=\"onPointerCancel($event)\"\n  (wheel)=\"onWheel($event)\"\n  (contextmenu)=\"onContextMenu($event)\"\n>\n  <canvas\n    #canvas\n    class=\"octomap-2d-pgm__canvas\"\n    [style.transform]=\"viewTransform()\"\n  ></canvas>\n</div>\n", styles: [":host{display:block;width:100%;height:100%;min-height:0;overflow:hidden;background:#0b1016}.octomap-2d-pgm__viewport{position:relative;width:100%;height:100%;overflow:hidden;cursor:grab;touch-action:none}.octomap-2d-pgm__viewport:active{cursor:grabbing}.octomap-2d-pgm__canvas{display:block;width:100%;height:100%;object-fit:contain;image-rendering:pixelated;transform-origin:0 0;pointer-events:none;will-change:transform}\n"] }]
+            args: [{ selector: 'howell-octomap-2d-pgm', imports: [], changeDetection: ChangeDetectionStrategy.OnPush, template: "<div\n  #viewport\n  class=\"octomap-2d-pgm__viewport\"\n  [style.background]=\"backgroundColor\"\n  (pointerdown)=\"onPointerDown($event)\"\n  (pointermove)=\"onPointerMove($event)\"\n  (pointerup)=\"onPointerUp($event)\"\n  (pointercancel)=\"onPointerCancel($event)\"\n  (wheel)=\"onWheel($event)\"\n  (contextmenu)=\"onContextMenu($event)\"\n>\n  <canvas\n    #canvas\n    class=\"octomap-2d-pgm__canvas\"\n    [style.transform]=\"viewTransform()\"\n  ></canvas>\n</div>\n", styles: [":host{display:block;width:100%;height:100%;min-height:0;overflow:hidden}.octomap-2d-pgm__viewport{position:relative;width:100%;height:100%;overflow:hidden;cursor:grab;touch-action:none}.octomap-2d-pgm__viewport:active{cursor:grabbing}.octomap-2d-pgm__canvas{display:block;width:100%;height:100%;object-fit:contain;image-rendering:pixelated;transform-origin:0 0;pointer-events:none;will-change:transform}\n"] }]
         }], ctorParameters: () => [], propDecorators: { image: [{
                 type: Input
             }], resolution: [{
@@ -1246,7 +1325,19 @@ i0.ɵɵngDeclareClassMetadata({ minVersion: "12.0.0", version: "21.2.26", ngImpo
                 type: Input
             }], startClearance: [{
                 type: Input
+            }], allowPan: [{
+                type: Input
+            }], allowZoom: [{
+                type: Input
+            }], backgroundColor: [{
+                type: Input
+            }], startImage: [{
+                type: Input
+            }], goalImage: [{
+                type: Input
             }], pathChange: [{
+                type: Output
+            }], pathComputed: [{
                 type: Output
             }], canvasRef: [{ type: i0.ViewChild, args: ['canvas', { isSignal: true }] }], viewportRef: [{ type: i0.ViewChild, args: ['viewport', { isSignal: true }] }] } });
 /** 「起点大小」的自动值：短边的 1/120，与原来固定圆点的观感一致。 */
@@ -1274,6 +1365,35 @@ function tracePath(context, points) {
             context.lineTo(points[i].x, points[i].y);
         }
     }
+}
+/** 起点碰撞足迹：只画圈，不画圆点（外部图片标记用它垫底）。 */
+function drawFootprint(context, grid, cell, footprintRadius) {
+    if (!(footprintRadius > 0)) {
+        return;
+    }
+    const { x, y } = cellCenter(grid, cell);
+    const radius = footprintRadius / grid.resolution;
+    const lineWidth = Math.max(0.8, Math.min(grid.width, grid.height) / 400);
+    context.beginPath();
+    context.arc(x, y, radius, 0, Math.PI * 2);
+    context.fillStyle = 'rgba(22, 163, 74, 0.18)';
+    context.fill();
+    context.beginPath();
+    context.arc(x, y, radius, 0, Math.PI * 2);
+    context.strokeStyle = 'rgba(22, 163, 74, 0.9)';
+    context.lineWidth = lineWidth;
+    context.stroke();
+}
+/** 把外部标记图按最大边 `size` 格等比居中画在格心上。 */
+function drawMarkerImage(context, grid, cell, image, size) {
+    const { x, y } = cellCenter(grid, cell);
+    const max = Math.max(1, size);
+    const ratio = image.naturalWidth > 0 && image.naturalHeight > 0
+        ? image.naturalWidth / image.naturalHeight
+        : 1;
+    const width = ratio >= 1 ? max : max * ratio;
+    const height = ratio >= 1 ? max / ratio : max;
+    context.drawImage(image, x - width / 2, y - height / 2, width, height);
 }
 /**
  * 端点标记。`footprintRadius` > 0 时额外画一圈碰撞足迹：起点那一圈就是小狗在二维
