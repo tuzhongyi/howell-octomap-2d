@@ -264,7 +264,7 @@ declare class OctoMapPgmComponent implements OnChanges {
      */
     private draw;
     static ɵfac: _angular_core.ɵɵFactoryDeclaration<OctoMapPgmComponent, never>;
-    static ɵcmp: _angular_core.ɵɵComponentDeclaration<OctoMapPgmComponent, "app-octo-map-pgm", never, { "image": { "alias": "image"; "required": false; }; "resolution": { "alias": "resolution"; "required": false; }; "dogRadius": { "alias": "dogRadius"; "required": false; }; "goalRadius": { "alias": "goalRadius"; "required": false; }; "mode": { "alias": "mode"; "required": false; }; }, { "modeChange": "modeChange"; "pathChange": "pathChange"; }, never, never, true, never>;
+    static ɵcmp: _angular_core.ɵɵComponentDeclaration<OctoMapPgmComponent, "howell-octomap-2d-pgm", never, { "image": { "alias": "image"; "required": false; }; "resolution": { "alias": "resolution"; "required": false; }; "dogRadius": { "alias": "dogRadius"; "required": false; }; "goalRadius": { "alias": "goalRadius"; "required": false; }; "mode": { "alias": "mode"; "required": false; }; }, { "modeChange": "modeChange"; "pathChange": "pathChange"; }, never, never, true, never>;
 }
 
 /**
