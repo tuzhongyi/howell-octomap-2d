@@ -718,9 +718,11 @@ function pgmWorldToCell(grid, x, z) {
  * 决定终点歪了之后最多吸附多远。二维平面里没有高度与天花板，`maxStepHeight` /
  * `dogHeight` 不参与判定。
  *
- * 交互：左键设起点、右键设终点；**点了「开始寻址」才计算**。点完两个端点后路线不会
- * 自己冒出来，调参数也不会悄悄重算——参数改过就把旧结果清掉，让用户知道该再点一次。
- * 走不通时不只是报错：A* 记下能走到的最远处，面板和画布会标出卡在哪一格。
+ * 交互：左键设起点、右键设终点；**宿主调用 {@link runSearch} 才计算**。组件本身不画
+ * 工具条或设置面板——那些在宿主里（test 的 `d2-settings`）。组件只负责画布、交互、
+ * 建图与寻路，并通过 {@link viewState} 暴露只读状态给宿主显示。参数改过就把旧结果
+ * 清掉，让用户知道该再点一次。走不通时不只是报错：A* 记下能走到的最远处，画布会标出
+ * 卡在哪一格。
  */
 class Octomap2dPgmComponent {
     /** 要寻路的 PGM 图像；为空时只显示一句提示。 */
@@ -732,20 +734,24 @@ class Octomap2dPgmComponent {
     /** 终点范围（米）：点中的格子不可通行时，最多吸附这么远。 */
     goalRadius = OCTOMAP_PGM_DEFAULT_GOAL_RADIUS;
     /**
-     * 初始通行口径。切换之后由组件自己记（并发出 {@link modeChange}）；父组件再改
-     * 这个输入会覆盖当前选择。
+     * 通行口径。由宿主拥有；父组件改这个输入会重建网格。
      *
      * 默认「黑格可走」，与本仓导出的 PGM 对齐：那里的黑 = 该列有点，正是小狗要走的
-     * 地面；从 map-server 换来、墙画成黑色的地图在工具条上切到「白格可走」即可。
+     * 地面；从 map-server 换来、墙画成黑色的地图在宿主里切到「白格可走」即可。
      */
     mode = 'occupiedWalkable';
-    /** 用户切换通行口径时发出。 */
-    modeChange = new EventEmitter();
+    /** 起点圆点半径（格）。null 表示按地图短边自动取值。 */
+    markerSize = null;
+    /** 起点吸附范围（米）：点中的起点不可走时，最多找这么远。 */
+    startSnapRadius = OCTOMAP_PGM_DEFAULT_GOAL_RADIUS;
+    /**
+     * 起点要求的最小净空（米）。比建图时的碰撞半径更严时，起点会被推到离障碍更远的
+     * 格子上；小于等于 `dogRadius` 时不生效（路线本身仍按碰撞半径膨胀）。
+     */
+    startClearance = OCTOMAP_PGM_DEFAULT_DOG_RADIUS;
     /** 每次「开始寻址」或清除时发出，供宿主显示或转交。 */
     pathChange = new EventEmitter();
     canvasRef = viewChild('canvas', ...(ngDevMode ? [{ debugName: "canvasRef" }] : /* istanbul ignore next */ []));
-    /** 当前通行口径。输入只是初值，选择器改的是这个。 */
-    activeMode = signal('occupiedWalkable', ...(ngDevMode ? [{ debugName: "activeMode" }] : /* istanbul ignore next */ []));
     /** 当前网格；`image` 为空、分辨率无效或建图失败时为空。 */
     grid = signal(null, ...(ngDevMode ? [{ debugName: "grid" }] : /* istanbul ignore next */ []));
     /** 用户点中的起点 / 终点格（吸附前的原始格）。 */
@@ -753,41 +759,14 @@ class Octomap2dPgmComponent {
     goalCell = signal(null, ...(ngDevMode ? [{ debugName: "goalCell" }] : /* istanbul ignore next */ []));
     /** 最近一次「开始寻址」的结果；null 表示还没算，或端点 / 参数已经改过。 */
     plan = signal(null, ...(ngDevMode ? [{ debugName: "plan" }] : /* istanbul ignore next */ []));
-    /** 起点圆点半径（格）。只影响画出来的标记，不参与寻路。 */
-    markerSize = signal(10, ...(ngDevMode ? [{ debugName: "markerSize" }] : /* istanbul ignore next */ []));
-    /** 起点吸附范围（米）：点中的起点不可走时，最多找这么远。默认跟终点范围一致。 */
-    startSnapRadius = signal(OCTOMAP_PGM_DEFAULT_GOAL_RADIUS, ...(ngDevMode ? [{ debugName: "startSnapRadius" }] : /* istanbul ignore next */ []));
-    /**
-     * 起点要求的最小净空（米）。比建图时的碰撞半径更严时，起点会被推到离障碍更远的
-     * 格子上；小于等于 `dogRadius` 时不生效（路线本身仍按碰撞半径膨胀）。
-     */
-    startClearance = signal(OCTOMAP_PGM_DEFAULT_DOG_RADIUS, ...(ngDevMode ? [{ debugName: "startClearance" }] : /* istanbul ignore next */ []));
-    /** 面板里的值一旦被用户改过，就不要再被宿主的新输入或自动默认值覆盖。 */
-    startRadiusTouched = false;
-    clearanceTouched = false;
-    markerTouched = false;
-    modeOptions = Object.keys(OCTOMAP_PGM_MODE_LABELS).map((value) => ({ value, ...OCTOMAP_PGM_MODE_LABELS[value] }));
-    /** 表单事件只放需要从 DOM 上取值的处理器。 */
-    on = {
-        mode: (event) => {
-            this.setMode(event.target.value);
-        },
-        markerSize: (event) => {
-            this.markerTouched = true;
-            this.markerSize.set(readNumber(event, this.markerSize(), 1));
-        },
-        startSnapRadius: (event) => {
-            this.startRadiusTouched = true;
-            this.startSnapRadius.set(readNumber(event, this.startSnapRadius(), 0));
-            this.clearPlan();
-        },
-        startClearance: (event) => {
-            this.clearanceTouched = true;
-            this.startClearance.set(readNumber(event, this.startClearance(), 0));
-            this.clearPlan();
-        },
-    };
+    /** 设置输入的状态镜像；用信号驱动重绘与对外快照。 */
+    markerSizeState = signal(null, ...(ngDevMode ? [{ debugName: "markerSizeState" }] : /* istanbul ignore next */ []));
+    startSnapState = signal(OCTOMAP_PGM_DEFAULT_GOAL_RADIUS, ...(ngDevMode ? [{ debugName: "startSnapState" }] : /* istanbul ignore next */ []));
+    startClearanceState = signal(OCTOMAP_PGM_DEFAULT_DOG_RADIUS, ...(ngDevMode ? [{ debugName: "startClearanceState" }] : /* istanbul ignore next */ []));
     constructor() {
+        this.markerSizeState.set(this.markerSize);
+        this.startSnapState.set(this.startSnapRadius);
+        this.startClearanceState.set(this.startClearance);
         effect(() => this.draw());
     }
     ngOnChanges(changes) {
@@ -798,33 +777,27 @@ class Octomap2dPgmComponent {
             this.goalCell.set(null);
             rebuild = true;
         }
-        if (changes['mode']) {
-            this.activeMode.set(this.mode);
-            rebuild = true;
-        }
-        if (changes['dogRadius']) {
-            if (!this.clearanceTouched) {
-                this.startClearance.set(this.dogRadius);
-            }
-            rebuild = true;
-        }
-        if (changes['resolution']) {
+        if (changes['mode'] || changes['dogRadius'] || changes['resolution']) {
             rebuild = true;
         }
         if (changes['goalRadius']) {
-            if (!this.startRadiusTouched) {
-                this.startSnapRadius.set(this.goalRadius);
-            }
             // 终点范围参与规划，换了就得重算，旧结果不能留。
             this.clearPlan();
+        }
+        if (changes['startSnapRadius']) {
+            this.startSnapState.set(this.startSnapRadius);
+            this.clearPlan();
+        }
+        if (changes['startClearance']) {
+            this.startClearanceState.set(this.startClearance);
+            this.clearPlan();
+        }
+        if (changes['markerSize']) {
+            this.markerSizeState.set(this.markerSize);
         }
         if (rebuild) {
             this.rebuild();
         }
-    }
-    /** 当前口径的说明，显示在图例旁边。 */
-    modeHint() {
-        return OCTOMAP_PGM_MODE_LABELS[this.activeMode()].hint;
     }
     /** 网格尺寸与分辨率，显示在工具条上。 */
     gridInfo() {
@@ -868,7 +841,7 @@ class Octomap2dPgmComponent {
             case 'noGoal':
                 return '右键在图上点一下设终点。';
             case 'blockedStart':
-                return `起点附近 ${this.startSnapRadius().toFixed(2)} m 内没有${this.clearanceHint()}可通行的格子。`;
+                return `起点附近 ${this.startSnapState().toFixed(2)} m 内没有${this.clearanceHint()}可通行的格子。`;
             case 'blockedGoal':
                 return `终点附近 ${this.goalRadius.toFixed(2)} m 内没有可通行的格子。`;
             case 'unreachable':
@@ -889,14 +862,23 @@ class Octomap2dPgmComponent {
         }
         return '';
     }
-    setMode(value) {
-        const mode = value;
-        if (mode === this.activeMode()) {
-            return;
-        }
-        this.activeMode.set(mode);
-        this.modeChange.emit(mode);
-        this.rebuild();
+    /** 只读状态快照；宿主设置面板用。 */
+    viewState() {
+        const grid = this.grid();
+        return {
+            grid: grid
+                ? { width: grid.width, height: grid.height, resolution: grid.resolution }
+                : null,
+            startCell: this.startCell(),
+            goalCell: this.goalCell(),
+            plan: this.plan(),
+            canSearch: this.canSearch(),
+            gridInfo: this.gridInfo(),
+            startText: this.startText(),
+            goalText: this.goalText(),
+            status: this.statusText(),
+            markerSize: this.markerSizeState() ?? (grid ? autoMarkerSize(grid) : null),
+        };
     }
     /** 用户按下「开始寻址」：这时才真的跑一次规划。 */
     runSearch() {
@@ -904,7 +886,7 @@ class Octomap2dPgmComponent {
         if (!grid) {
             return;
         }
-        const plan = planPgmPath(grid, this.startCell(), this.goalCell(), this.goalRadius, this.startSnapRadius(), this.startClearance());
+        const plan = planPgmPath(grid, this.startCell(), this.goalCell(), this.goalRadius, this.startSnapState(), this.startClearanceState());
         this.plan.set(plan);
         this.pathChange.emit(plan);
     }
@@ -949,15 +931,11 @@ class Octomap2dPgmComponent {
             return;
         }
         const grid = buildPgmGrid(image, {
-            mode: this.activeMode(),
+            mode: this.mode,
             dogRadius: this.dogRadius,
             resolution: this.resolution,
         });
         this.grid.set(grid);
-        if (!this.markerTouched) {
-            // 默认圆点跟着地图大小走：小图不至于糊住起点，大图也不至于看不见。
-            this.markerSize.set(autoMarkerSize(grid));
-        }
     }
     /** 清掉旧结果；没有结果时什么也不发。 */
     clearPlan() {
@@ -978,7 +956,7 @@ class Octomap2dPgmComponent {
     }
     /** 起点净空比碰撞半径更严时，失败提示里说明是哪一套口径卡住了。 */
     clearanceHint() {
-        return this.startClearance() > this.dogRadius ? '满足起点净空的' : '';
+        return this.startClearanceState() > this.dogRadius ? '满足起点净空的' : '';
     }
     /** 走不通时的一句话：最远到哪、还差多远、残段多长。 */
     unreachableText(grid, plan) {
@@ -1120,7 +1098,7 @@ class Octomap2dPgmComponent {
         const start = this.startCell();
         const goal = this.goalCell();
         if (start !== null) {
-            drawMarker(context, grid, plan?.startCell ?? start, '#16a34a', this.startClearance(), this.markerSize());
+            drawMarker(context, grid, plan?.startCell ?? start, '#16a34a', this.startClearanceState(), this.markerSizeState() ?? autoMarkerSize(grid));
         }
         if (goal !== null) {
             drawMarker(context, grid, plan?.goalCell ?? goal, '#f59e0b', 0);
@@ -1130,11 +1108,11 @@ class Octomap2dPgmComponent {
         }
     }
     static ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "21.2.26", ngImport: i0, type: Octomap2dPgmComponent, deps: [], target: i0.ɵɵFactoryTarget.Component });
-    static ɵcmp = i0.ɵɵngDeclareComponent({ minVersion: "17.0.0", version: "21.2.26", type: Octomap2dPgmComponent, isStandalone: true, selector: "howell-octomap-2d-pgm", inputs: { image: "image", resolution: "resolution", dogRadius: "dogRadius", goalRadius: "goalRadius", mode: "mode" }, outputs: { modeChange: "modeChange", pathChange: "pathChange" }, viewQueries: [{ propertyName: "canvasRef", first: true, predicate: ["canvas"], descendants: true, isSignal: true }], usesOnChanges: true, ngImport: i0, template: "<section class=\"octomap-2d-pgm\">\n  <header class=\"octomap-2d-pgm__bar\">\n    <label class=\"octomap-2d-pgm__field\">\n      <span class=\"octomap-2d-pgm__label\">\u901A\u884C\u53E3\u5F84</span>\n      <select class=\"octomap-2d-pgm__control\" [value]=\"activeMode()\" (change)=\"on.mode($event)\">\n        @for (option of modeOptions; track option.value) {\n          <option [value]=\"option.value\">{{ option.label }}</option>\n        }\n      </select>\n    </label>\n\n    <span class=\"octomap-2d-pgm__readout\">\u78B0\u649E\u534A\u5F84 {{ dogRadius.toFixed(2) }} m</span>\n    <span class=\"octomap-2d-pgm__readout\">\u6BCF\u683C {{ resolution.toFixed(2) }} m</span>\n    <span class=\"octomap-2d-pgm__readout\">\u7EC8\u70B9\u8303\u56F4 {{ goalRadius.toFixed(2) }} m</span>\n\n    @if (gridInfo(); as info) {\n      <span class=\"octomap-2d-pgm__info\">{{ info }}</span>\n    }\n  </header>\n\n  <div class=\"octomap-2d-pgm__main\">\n    <aside class=\"octomap-2d-pgm__panel\">\n      <h2 class=\"octomap-2d-pgm__panel-title\">\u5BFB\u8DEF</h2>\n\n      <div class=\"octomap-2d-pgm__coords\">\n        <div class=\"octomap-2d-pgm__coord\">\n          <span class=\"octomap-2d-pgm__coord-label\">\n            <span class=\"octomap-2d-pgm__dot octomap-2d-pgm__dot--start\"></span>\u8D77\u70B9\n          </span>\n          <span class=\"octomap-2d-pgm__coord-value\">{{ startText() }}</span>\n        </div>\n        <div class=\"octomap-2d-pgm__coord\">\n          <span class=\"octomap-2d-pgm__coord-label\">\n            <span class=\"octomap-2d-pgm__dot octomap-2d-pgm__dot--goal\"></span>\u7EC8\u70B9\n          </span>\n          <span class=\"octomap-2d-pgm__coord-value\">{{ goalText() }}</span>\n        </div>\n      </div>\n\n      <label class=\"octomap-2d-pgm__param\">\n        <span class=\"octomap-2d-pgm__param-label\" title=\"\u53EA\u5F71\u54CD\u753B\u51FA\u6765\u7684\u5706\u70B9\u5927\u5C0F\uFF0C\u4E0D\u53C2\u4E0E\u5BFB\u8DEF\u3002\">\u8D77\u70B9\u5927\u5C0F\uFF08\u683C\uFF09</span>\n        <input\n          class=\"octomap-2d-pgm__number\"\n          type=\"number\"\n          min=\"1\"\n          step=\"1\"\n          [value]=\"markerSize()\"\n          (change)=\"on.markerSize($event)\"\n        />\n      </label>\n\n      <label class=\"octomap-2d-pgm__param\">\n        <span class=\"octomap-2d-pgm__param-label\" title=\"\u8D77\u70B9\u843D\u5728\u4E0D\u53EF\u8D70\u7684\u683C\u5B50\u4E0A\u65F6\uFF0C\u6700\u591A\u627E\u8FD9\u4E48\u8FDC\u843D\u811A\u3002\">\n          \u8D77\u70B9\u5438\u9644\uFF08m\uFF09\n        </span>\n        <input\n          class=\"octomap-2d-pgm__number\"\n          type=\"number\"\n          min=\"0\"\n          step=\"0.05\"\n          [value]=\"startSnapRadius()\"\n          (change)=\"on.startSnapRadius($event)\"\n        />\n      </label>\n\n      <label class=\"octomap-2d-pgm__param\">\n        <span\n          class=\"octomap-2d-pgm__param-label\"\n          title=\"\u8D77\u70B9\u5468\u56F4\u8981\u6C42\u7684\u6700\u5C0F\u51C0\u7A7A\uFF1B\u4E0D\u8D85\u8FC7\u5168\u5C40\u78B0\u649E\u534A\u5F84\u65F6\u4E0D\u751F\u6548\u3002\"\n        >\n          \u8D77\u70B9\u78B0\u649E\uFF08m\uFF09\n        </span>\n        <input\n          class=\"octomap-2d-pgm__number\"\n          type=\"number\"\n          min=\"0\"\n          step=\"0.05\"\n          [value]=\"startClearance()\"\n          (change)=\"on.startClearance($event)\"\n        />\n      </label>\n\n      <button\n        class=\"octomap-2d-pgm__button octomap-2d-pgm__button--go\"\n        type=\"button\"\n        [disabled]=\"!canSearch()\"\n        (click)=\"runSearch()\"\n      >\n        \u5F00\u59CB\u5BFB\u5740\n      </button>\n\n      <p class=\"octomap-2d-pgm__status\">{{ statusText() }}</p>\n\n      <button class=\"octomap-2d-pgm__button octomap-2d-pgm__button--ghost\" type=\"button\" (click)=\"clearMarks()\">\n        \u6E05\u9664\u8D77\u7EC8\u70B9\n      </button>\n    </aside>\n\n    <div class=\"octomap-2d-pgm__viewport\">\n      <canvas\n        #canvas\n        class=\"octomap-2d-pgm__canvas\"\n        [class.octomap-2d-pgm__canvas--empty]=\"!grid()\"\n        (pointerdown)=\"onPointerDown($event)\"\n        (contextmenu)=\"onContextMenu($event)\"\n      ></canvas>\n      @if (!grid()) {\n        <p class=\"octomap-2d-pgm__empty\">\u8FD8\u6CA1\u6709\u53EF\u7528\u7684 PGM \u5730\u56FE\u3002\u5148\u5728\u5DE5\u5177\u6761\u4E0A\u52A0\u8F7D\u4E00\u4E2A .pgm \u6587\u4EF6\u3002</p>\n      }\n    </div>\n  </div>\n\n  <div class=\"octomap-2d-pgm__legend\">\n    <span class=\"octomap-2d-pgm__swatch octomap-2d-pgm__swatch--free\"></span>\n    <span class=\"octomap-2d-pgm__legend-text\">\u53EF\u8D70</span>\n    <span class=\"octomap-2d-pgm__swatch octomap-2d-pgm__swatch--obstacle\"></span>\n    <span class=\"octomap-2d-pgm__legend-text\">\u969C\u788D</span>\n    <span class=\"octomap-2d-pgm__swatch octomap-2d-pgm__swatch--inflated\"></span>\n    <span class=\"octomap-2d-pgm__legend-text\">\u78B0\u649E\u81A8\u80C0</span>\n    <span class=\"octomap-2d-pgm__swatch octomap-2d-pgm__swatch--path\"></span>\n    <span class=\"octomap-2d-pgm__legend-text\">\u8DEF\u5F84</span>\n    <span class=\"octomap-2d-pgm__swatch octomap-2d-pgm__swatch--stuck\"></span>\n    <span class=\"octomap-2d-pgm__legend-text\">\u8D70\u4E0D\u901A\uFF08\u6B8B\u6BB5 / \u5361\u70B9\uFF09</span>\n    <span class=\"octomap-2d-pgm__swatch octomap-2d-pgm__swatch--start\"></span>\n    <span class=\"octomap-2d-pgm__legend-text\">\u8D77\u70B9\uFF08\u542B\u8DB3\u8FF9\uFF09</span>\n    <span class=\"octomap-2d-pgm__swatch octomap-2d-pgm__swatch--goal\"></span>\n    <span class=\"octomap-2d-pgm__legend-text\">\u7EC8\u70B9</span>\n\n    <span class=\"octomap-2d-pgm__hint\">\u5DE6\u952E\u8BBE\u8D77\u70B9\uFF0C\u53F3\u952E\u8BBE\u7EC8\u70B9\uFF0C\u7136\u540E\u70B9\u300C\u5F00\u59CB\u5BFB\u5740\u300D\u3002{{ modeHint() }}</span>\n  </div>\n</section>\n", styles: [":host{display:flex;flex-direction:column;width:100%;height:100%;min-height:0;color:#e6edf7;background:#0b1016;color-scheme:dark}.octomap-2d-pgm{display:flex;flex-direction:column;width:100%;height:100%;min-height:0}.octomap-2d-pgm__bar{flex:0 0 auto;display:flex;flex-wrap:wrap;align-items:center;gap:14px;padding:10px 16px;background:#141a24;border-bottom:1px solid #232b3a}.octomap-2d-pgm__field{display:flex;align-items:center;gap:8px}.octomap-2d-pgm__label{font-size:13px;color:#8b98ad}.octomap-2d-pgm__control{padding:6px 10px;font-size:13px;color:#e6edf7;background:#1d2635;border:1px solid #2a3448;border-radius:6px}.octomap-2d-pgm__readout{font-size:13px;color:#8b98ad;white-space:nowrap}.octomap-2d-pgm__info{margin-left:auto;font-size:12px;color:#6b7a91;white-space:nowrap}.octomap-2d-pgm__button{padding:7px 14px;font-size:13px;color:#e6edf7;background:#2b6cb0;border:none;border-radius:6px;cursor:pointer}.octomap-2d-pgm__button:hover:not(:disabled){background:#3380d0}.octomap-2d-pgm__button:disabled{color:#6b7a91;background:#263243;cursor:not-allowed}.octomap-2d-pgm__button--go{margin-top:4px;font-weight:600}.octomap-2d-pgm__button--ghost{background:transparent;color:#8b98ad;border:1px solid #2a3448}.octomap-2d-pgm__button--ghost:hover:not(:disabled){background:#1d2635;color:#e6edf7}.octomap-2d-pgm__main{display:flex;flex:1 1 auto;min-height:0}.octomap-2d-pgm__panel{flex:0 0 236px;display:flex;flex-direction:column;gap:10px;padding:14px;overflow-y:auto;background:#10161f;border-right:1px solid #232b3a}.octomap-2d-pgm__panel-title{margin:0;font-size:13px;font-weight:600;letter-spacing:.04em;color:#8b98ad}.octomap-2d-pgm__coords{display:flex;flex-direction:column;gap:6px;padding:10px;background:#141a24;border:1px solid #232b3a;border-radius:8px}.octomap-2d-pgm__coord{display:flex;justify-content:space-between;gap:8px;font-size:12px}.octomap-2d-pgm__coord-label{display:flex;align-items:center;gap:6px;color:#8b98ad}.octomap-2d-pgm__coord-value{color:#e6edf7;font-variant-numeric:tabular-nums}.octomap-2d-pgm__dot{width:8px;height:8px;border-radius:50%}.octomap-2d-pgm__dot--start{background:#16a34a}.octomap-2d-pgm__dot--goal{background:#f59e0b}.octomap-2d-pgm__param{display:flex;flex-direction:column;gap:4px}.octomap-2d-pgm__param-label{font-size:12px;color:#8b98ad}.octomap-2d-pgm__number{width:100%;box-sizing:border-box;padding:6px 8px;font-size:13px;color:#e6edf7;background:#1d2635;border:1px solid #2a3448;border-radius:6px}.octomap-2d-pgm__status{margin:0;font-size:12px;line-height:1.5;color:#aab6c8;word-break:break-word}.octomap-2d-pgm__viewport{position:relative;flex:1 1 auto;min-width:0;min-height:0;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#0b1016}.octomap-2d-pgm__canvas{width:100%;height:100%;object-fit:contain;image-rendering:pixelated;cursor:crosshair}.octomap-2d-pgm__canvas--empty{display:none}.octomap-2d-pgm__empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;margin:0;padding:24px;font-size:14px;color:#8b98ad;text-align:center}.octomap-2d-pgm__legend{flex:0 0 auto;display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;padding:8px 16px 12px;background:#141a24}.octomap-2d-pgm__swatch{width:12px;height:12px;border-radius:3px;border:1px solid rgba(255,255,255,.18)}.octomap-2d-pgm__swatch--free{background:#f8fafc}.octomap-2d-pgm__swatch--obstacle{background:#1f2937}.octomap-2d-pgm__swatch--inflated{background:#fecaca}.octomap-2d-pgm__swatch--path{background:#2563eb}.octomap-2d-pgm__swatch--stuck{background:#dc2626}.octomap-2d-pgm__swatch--start{background:#16a34a}.octomap-2d-pgm__swatch--goal{background:#f59e0b}.octomap-2d-pgm__legend-text{font-size:12px;color:#8b98ad}.octomap-2d-pgm__hint{flex:1 1 100%;font-size:12px;color:#6b7a91}\n"], changeDetection: i0.ChangeDetectionStrategy.OnPush });
+    static ɵcmp = i0.ɵɵngDeclareComponent({ minVersion: "17.2.0", version: "21.2.26", type: Octomap2dPgmComponent, isStandalone: true, selector: "howell-octomap-2d-pgm", inputs: { image: "image", resolution: "resolution", dogRadius: "dogRadius", goalRadius: "goalRadius", mode: "mode", markerSize: "markerSize", startSnapRadius: "startSnapRadius", startClearance: "startClearance" }, outputs: { pathChange: "pathChange" }, viewQueries: [{ propertyName: "canvasRef", first: true, predicate: ["canvas"], descendants: true, isSignal: true }], usesOnChanges: true, ngImport: i0, template: "<canvas\n  #canvas\n  class=\"octomap-2d-pgm__canvas\"\n  (pointerdown)=\"onPointerDown($event)\"\n  (contextmenu)=\"onContextMenu($event)\"\n></canvas>\n", styles: [":host{display:block;width:100%;height:100%;min-height:0;background:#0b1016}.octomap-2d-pgm__canvas{display:block;width:100%;height:100%;object-fit:contain;image-rendering:pixelated;cursor:crosshair}\n"], changeDetection: i0.ChangeDetectionStrategy.OnPush });
 }
 i0.ɵɵngDeclareClassMetadata({ minVersion: "12.0.0", version: "21.2.26", ngImport: i0, type: Octomap2dPgmComponent, decorators: [{
             type: Component,
-            args: [{ selector: 'howell-octomap-2d-pgm', imports: [], changeDetection: ChangeDetectionStrategy.OnPush, template: "<section class=\"octomap-2d-pgm\">\n  <header class=\"octomap-2d-pgm__bar\">\n    <label class=\"octomap-2d-pgm__field\">\n      <span class=\"octomap-2d-pgm__label\">\u901A\u884C\u53E3\u5F84</span>\n      <select class=\"octomap-2d-pgm__control\" [value]=\"activeMode()\" (change)=\"on.mode($event)\">\n        @for (option of modeOptions; track option.value) {\n          <option [value]=\"option.value\">{{ option.label }}</option>\n        }\n      </select>\n    </label>\n\n    <span class=\"octomap-2d-pgm__readout\">\u78B0\u649E\u534A\u5F84 {{ dogRadius.toFixed(2) }} m</span>\n    <span class=\"octomap-2d-pgm__readout\">\u6BCF\u683C {{ resolution.toFixed(2) }} m</span>\n    <span class=\"octomap-2d-pgm__readout\">\u7EC8\u70B9\u8303\u56F4 {{ goalRadius.toFixed(2) }} m</span>\n\n    @if (gridInfo(); as info) {\n      <span class=\"octomap-2d-pgm__info\">{{ info }}</span>\n    }\n  </header>\n\n  <div class=\"octomap-2d-pgm__main\">\n    <aside class=\"octomap-2d-pgm__panel\">\n      <h2 class=\"octomap-2d-pgm__panel-title\">\u5BFB\u8DEF</h2>\n\n      <div class=\"octomap-2d-pgm__coords\">\n        <div class=\"octomap-2d-pgm__coord\">\n          <span class=\"octomap-2d-pgm__coord-label\">\n            <span class=\"octomap-2d-pgm__dot octomap-2d-pgm__dot--start\"></span>\u8D77\u70B9\n          </span>\n          <span class=\"octomap-2d-pgm__coord-value\">{{ startText() }}</span>\n        </div>\n        <div class=\"octomap-2d-pgm__coord\">\n          <span class=\"octomap-2d-pgm__coord-label\">\n            <span class=\"octomap-2d-pgm__dot octomap-2d-pgm__dot--goal\"></span>\u7EC8\u70B9\n          </span>\n          <span class=\"octomap-2d-pgm__coord-value\">{{ goalText() }}</span>\n        </div>\n      </div>\n\n      <label class=\"octomap-2d-pgm__param\">\n        <span class=\"octomap-2d-pgm__param-label\" title=\"\u53EA\u5F71\u54CD\u753B\u51FA\u6765\u7684\u5706\u70B9\u5927\u5C0F\uFF0C\u4E0D\u53C2\u4E0E\u5BFB\u8DEF\u3002\">\u8D77\u70B9\u5927\u5C0F\uFF08\u683C\uFF09</span>\n        <input\n          class=\"octomap-2d-pgm__number\"\n          type=\"number\"\n          min=\"1\"\n          step=\"1\"\n          [value]=\"markerSize()\"\n          (change)=\"on.markerSize($event)\"\n        />\n      </label>\n\n      <label class=\"octomap-2d-pgm__param\">\n        <span class=\"octomap-2d-pgm__param-label\" title=\"\u8D77\u70B9\u843D\u5728\u4E0D\u53EF\u8D70\u7684\u683C\u5B50\u4E0A\u65F6\uFF0C\u6700\u591A\u627E\u8FD9\u4E48\u8FDC\u843D\u811A\u3002\">\n          \u8D77\u70B9\u5438\u9644\uFF08m\uFF09\n        </span>\n        <input\n          class=\"octomap-2d-pgm__number\"\n          type=\"number\"\n          min=\"0\"\n          step=\"0.05\"\n          [value]=\"startSnapRadius()\"\n          (change)=\"on.startSnapRadius($event)\"\n        />\n      </label>\n\n      <label class=\"octomap-2d-pgm__param\">\n        <span\n          class=\"octomap-2d-pgm__param-label\"\n          title=\"\u8D77\u70B9\u5468\u56F4\u8981\u6C42\u7684\u6700\u5C0F\u51C0\u7A7A\uFF1B\u4E0D\u8D85\u8FC7\u5168\u5C40\u78B0\u649E\u534A\u5F84\u65F6\u4E0D\u751F\u6548\u3002\"\n        >\n          \u8D77\u70B9\u78B0\u649E\uFF08m\uFF09\n        </span>\n        <input\n          class=\"octomap-2d-pgm__number\"\n          type=\"number\"\n          min=\"0\"\n          step=\"0.05\"\n          [value]=\"startClearance()\"\n          (change)=\"on.startClearance($event)\"\n        />\n      </label>\n\n      <button\n        class=\"octomap-2d-pgm__button octomap-2d-pgm__button--go\"\n        type=\"button\"\n        [disabled]=\"!canSearch()\"\n        (click)=\"runSearch()\"\n      >\n        \u5F00\u59CB\u5BFB\u5740\n      </button>\n\n      <p class=\"octomap-2d-pgm__status\">{{ statusText() }}</p>\n\n      <button class=\"octomap-2d-pgm__button octomap-2d-pgm__button--ghost\" type=\"button\" (click)=\"clearMarks()\">\n        \u6E05\u9664\u8D77\u7EC8\u70B9\n      </button>\n    </aside>\n\n    <div class=\"octomap-2d-pgm__viewport\">\n      <canvas\n        #canvas\n        class=\"octomap-2d-pgm__canvas\"\n        [class.octomap-2d-pgm__canvas--empty]=\"!grid()\"\n        (pointerdown)=\"onPointerDown($event)\"\n        (contextmenu)=\"onContextMenu($event)\"\n      ></canvas>\n      @if (!grid()) {\n        <p class=\"octomap-2d-pgm__empty\">\u8FD8\u6CA1\u6709\u53EF\u7528\u7684 PGM \u5730\u56FE\u3002\u5148\u5728\u5DE5\u5177\u6761\u4E0A\u52A0\u8F7D\u4E00\u4E2A .pgm \u6587\u4EF6\u3002</p>\n      }\n    </div>\n  </div>\n\n  <div class=\"octomap-2d-pgm__legend\">\n    <span class=\"octomap-2d-pgm__swatch octomap-2d-pgm__swatch--free\"></span>\n    <span class=\"octomap-2d-pgm__legend-text\">\u53EF\u8D70</span>\n    <span class=\"octomap-2d-pgm__swatch octomap-2d-pgm__swatch--obstacle\"></span>\n    <span class=\"octomap-2d-pgm__legend-text\">\u969C\u788D</span>\n    <span class=\"octomap-2d-pgm__swatch octomap-2d-pgm__swatch--inflated\"></span>\n    <span class=\"octomap-2d-pgm__legend-text\">\u78B0\u649E\u81A8\u80C0</span>\n    <span class=\"octomap-2d-pgm__swatch octomap-2d-pgm__swatch--path\"></span>\n    <span class=\"octomap-2d-pgm__legend-text\">\u8DEF\u5F84</span>\n    <span class=\"octomap-2d-pgm__swatch octomap-2d-pgm__swatch--stuck\"></span>\n    <span class=\"octomap-2d-pgm__legend-text\">\u8D70\u4E0D\u901A\uFF08\u6B8B\u6BB5 / \u5361\u70B9\uFF09</span>\n    <span class=\"octomap-2d-pgm__swatch octomap-2d-pgm__swatch--start\"></span>\n    <span class=\"octomap-2d-pgm__legend-text\">\u8D77\u70B9\uFF08\u542B\u8DB3\u8FF9\uFF09</span>\n    <span class=\"octomap-2d-pgm__swatch octomap-2d-pgm__swatch--goal\"></span>\n    <span class=\"octomap-2d-pgm__legend-text\">\u7EC8\u70B9</span>\n\n    <span class=\"octomap-2d-pgm__hint\">\u5DE6\u952E\u8BBE\u8D77\u70B9\uFF0C\u53F3\u952E\u8BBE\u7EC8\u70B9\uFF0C\u7136\u540E\u70B9\u300C\u5F00\u59CB\u5BFB\u5740\u300D\u3002{{ modeHint() }}</span>\n  </div>\n</section>\n", styles: [":host{display:flex;flex-direction:column;width:100%;height:100%;min-height:0;color:#e6edf7;background:#0b1016;color-scheme:dark}.octomap-2d-pgm{display:flex;flex-direction:column;width:100%;height:100%;min-height:0}.octomap-2d-pgm__bar{flex:0 0 auto;display:flex;flex-wrap:wrap;align-items:center;gap:14px;padding:10px 16px;background:#141a24;border-bottom:1px solid #232b3a}.octomap-2d-pgm__field{display:flex;align-items:center;gap:8px}.octomap-2d-pgm__label{font-size:13px;color:#8b98ad}.octomap-2d-pgm__control{padding:6px 10px;font-size:13px;color:#e6edf7;background:#1d2635;border:1px solid #2a3448;border-radius:6px}.octomap-2d-pgm__readout{font-size:13px;color:#8b98ad;white-space:nowrap}.octomap-2d-pgm__info{margin-left:auto;font-size:12px;color:#6b7a91;white-space:nowrap}.octomap-2d-pgm__button{padding:7px 14px;font-size:13px;color:#e6edf7;background:#2b6cb0;border:none;border-radius:6px;cursor:pointer}.octomap-2d-pgm__button:hover:not(:disabled){background:#3380d0}.octomap-2d-pgm__button:disabled{color:#6b7a91;background:#263243;cursor:not-allowed}.octomap-2d-pgm__button--go{margin-top:4px;font-weight:600}.octomap-2d-pgm__button--ghost{background:transparent;color:#8b98ad;border:1px solid #2a3448}.octomap-2d-pgm__button--ghost:hover:not(:disabled){background:#1d2635;color:#e6edf7}.octomap-2d-pgm__main{display:flex;flex:1 1 auto;min-height:0}.octomap-2d-pgm__panel{flex:0 0 236px;display:flex;flex-direction:column;gap:10px;padding:14px;overflow-y:auto;background:#10161f;border-right:1px solid #232b3a}.octomap-2d-pgm__panel-title{margin:0;font-size:13px;font-weight:600;letter-spacing:.04em;color:#8b98ad}.octomap-2d-pgm__coords{display:flex;flex-direction:column;gap:6px;padding:10px;background:#141a24;border:1px solid #232b3a;border-radius:8px}.octomap-2d-pgm__coord{display:flex;justify-content:space-between;gap:8px;font-size:12px}.octomap-2d-pgm__coord-label{display:flex;align-items:center;gap:6px;color:#8b98ad}.octomap-2d-pgm__coord-value{color:#e6edf7;font-variant-numeric:tabular-nums}.octomap-2d-pgm__dot{width:8px;height:8px;border-radius:50%}.octomap-2d-pgm__dot--start{background:#16a34a}.octomap-2d-pgm__dot--goal{background:#f59e0b}.octomap-2d-pgm__param{display:flex;flex-direction:column;gap:4px}.octomap-2d-pgm__param-label{font-size:12px;color:#8b98ad}.octomap-2d-pgm__number{width:100%;box-sizing:border-box;padding:6px 8px;font-size:13px;color:#e6edf7;background:#1d2635;border:1px solid #2a3448;border-radius:6px}.octomap-2d-pgm__status{margin:0;font-size:12px;line-height:1.5;color:#aab6c8;word-break:break-word}.octomap-2d-pgm__viewport{position:relative;flex:1 1 auto;min-width:0;min-height:0;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#0b1016}.octomap-2d-pgm__canvas{width:100%;height:100%;object-fit:contain;image-rendering:pixelated;cursor:crosshair}.octomap-2d-pgm__canvas--empty{display:none}.octomap-2d-pgm__empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;margin:0;padding:24px;font-size:14px;color:#8b98ad;text-align:center}.octomap-2d-pgm__legend{flex:0 0 auto;display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;padding:8px 16px 12px;background:#141a24}.octomap-2d-pgm__swatch{width:12px;height:12px;border-radius:3px;border:1px solid rgba(255,255,255,.18)}.octomap-2d-pgm__swatch--free{background:#f8fafc}.octomap-2d-pgm__swatch--obstacle{background:#1f2937}.octomap-2d-pgm__swatch--inflated{background:#fecaca}.octomap-2d-pgm__swatch--path{background:#2563eb}.octomap-2d-pgm__swatch--stuck{background:#dc2626}.octomap-2d-pgm__swatch--start{background:#16a34a}.octomap-2d-pgm__swatch--goal{background:#f59e0b}.octomap-2d-pgm__legend-text{font-size:12px;color:#8b98ad}.octomap-2d-pgm__hint{flex:1 1 100%;font-size:12px;color:#6b7a91}\n"] }]
+            args: [{ selector: 'howell-octomap-2d-pgm', imports: [], changeDetection: ChangeDetectionStrategy.OnPush, template: "<canvas\n  #canvas\n  class=\"octomap-2d-pgm__canvas\"\n  (pointerdown)=\"onPointerDown($event)\"\n  (contextmenu)=\"onContextMenu($event)\"\n></canvas>\n", styles: [":host{display:block;width:100%;height:100%;min-height:0;background:#0b1016}.octomap-2d-pgm__canvas{display:block;width:100%;height:100%;object-fit:contain;image-rendering:pixelated;cursor:crosshair}\n"] }]
         }], ctorParameters: () => [], propDecorators: { image: [{
                 type: Input
             }], resolution: [{
@@ -1145,24 +1123,18 @@ i0.ɵɵngDeclareClassMetadata({ minVersion: "12.0.0", version: "21.2.26", ngImpo
                 type: Input
             }], mode: [{
                 type: Input
-            }], modeChange: [{
-                type: Output
+            }], markerSize: [{
+                type: Input
+            }], startSnapRadius: [{
+                type: Input
+            }], startClearance: [{
+                type: Input
             }], pathChange: [{
                 type: Output
             }], canvasRef: [{ type: i0.ViewChild, args: ['canvas', { isSignal: true }] }] } });
 /** 「起点大小」的自动值：短边的 1/120，与原来固定圆点的观感一致。 */
 function autoMarkerSize(grid) {
     return Math.max(1, Math.round(Math.min(grid.width, grid.height) / 120));
-}
-/** 从输入框里读一个有限的非负数；非法时回填 `fallback`，并且不改信号。 */
-function readNumber(event, fallback, min) {
-    const input = event.target;
-    const value = Number(input.value);
-    if (!Number.isFinite(value) || value < min) {
-        input.value = String(fallback);
-        return fallback;
-    }
-    return value;
 }
 /** 格索引序列 → 画布上的格心坐标（1 格 = 1 像素）。 */
 function cellPoints(grid, cells) {

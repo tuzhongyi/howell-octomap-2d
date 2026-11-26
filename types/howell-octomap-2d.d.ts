@@ -148,6 +148,29 @@ declare const OCTOMAP_PGM_DEFAULT_DOG_RADIUS = 0.25;
  * 与三维默认设置相同（0.5 m）；起点吸附范围默认也取这个值。
  */
 declare const OCTOMAP_PGM_DEFAULT_GOAL_RADIUS = 0.5;
+/**
+ * 组件对外的只读状态快照。
+ *
+ * 二维组件本身不画设置面板；宿主（比如 test 的 `d2-settings`）读这个快照来显示
+ * 网格信息、起终点读数、状态文字和实际生效的起点圆点大小。`markerSize` 为 `null`
+ * 时表示组件按地图尺寸自动取值。
+ */
+interface OctomapPgmViewState {
+    grid: {
+        width: number;
+        height: number;
+        resolution: number;
+    } | null;
+    startCell: number | null;
+    goalCell: number | null;
+    plan: OctomapPgmPlan | null;
+    canSearch: boolean;
+    gridInfo: string | null;
+    startText: string;
+    goalText: string;
+    status: string;
+    markerSize: number | null;
+}
 
 /**
  * 在一张 PGM 地图上做二维寻路。
@@ -161,9 +184,11 @@ declare const OCTOMAP_PGM_DEFAULT_GOAL_RADIUS = 0.5;
  * 决定终点歪了之后最多吸附多远。二维平面里没有高度与天花板，`maxStepHeight` /
  * `dogHeight` 不参与判定。
  *
- * 交互：左键设起点、右键设终点；**点了「开始寻址」才计算**。点完两个端点后路线不会
- * 自己冒出来，调参数也不会悄悄重算——参数改过就把旧结果清掉，让用户知道该再点一次。
- * 走不通时不只是报错：A* 记下能走到的最远处，面板和画布会标出卡在哪一格。
+ * 交互：左键设起点、右键设终点；**宿主调用 {@link runSearch} 才计算**。组件本身不画
+ * 工具条或设置面板——那些在宿主里（test 的 `d2-settings`）。组件只负责画布、交互、
+ * 建图与寻路，并通过 {@link viewState} 暴露只读状态给宿主显示。参数改过就把旧结果
+ * 清掉，让用户知道该再点一次。走不通时不只是报错：A* 记下能走到的最远处，画布会标出
+ * 卡在哪一格。
  */
 declare class Octomap2dPgmComponent implements OnChanges {
     /** 要寻路的 PGM 图像；为空时只显示一句提示。 */
@@ -175,20 +200,24 @@ declare class Octomap2dPgmComponent implements OnChanges {
     /** 终点范围（米）：点中的格子不可通行时，最多吸附这么远。 */
     goalRadius: number;
     /**
-     * 初始通行口径。切换之后由组件自己记（并发出 {@link modeChange}）；父组件再改
-     * 这个输入会覆盖当前选择。
+     * 通行口径。由宿主拥有；父组件改这个输入会重建网格。
      *
      * 默认「黑格可走」，与本仓导出的 PGM 对齐：那里的黑 = 该列有点，正是小狗要走的
-     * 地面；从 map-server 换来、墙画成黑色的地图在工具条上切到「白格可走」即可。
+     * 地面；从 map-server 换来、墙画成黑色的地图在宿主里切到「白格可走」即可。
      */
     mode: OctomapPgmMode;
-    /** 用户切换通行口径时发出。 */
-    readonly modeChange: EventEmitter<OctomapPgmMode>;
+    /** 起点圆点半径（格）。null 表示按地图短边自动取值。 */
+    markerSize: number | null;
+    /** 起点吸附范围（米）：点中的起点不可走时，最多找这么远。 */
+    startSnapRadius: number;
+    /**
+     * 起点要求的最小净空（米）。比建图时的碰撞半径更严时，起点会被推到离障碍更远的
+     * 格子上；小于等于 `dogRadius` 时不生效（路线本身仍按碰撞半径膨胀）。
+     */
+    startClearance: number;
     /** 每次「开始寻址」或清除时发出，供宿主显示或转交。 */
     readonly pathChange: EventEmitter<OctomapPgmPlan | null>;
     private readonly canvasRef;
-    /** 当前通行口径。输入只是初值，选择器改的是这个。 */
-    protected readonly activeMode: _angular_core.WritableSignal<OctomapPgmMode>;
     /** 当前网格；`image` 为空、分辨率无效或建图失败时为空。 */
     protected readonly grid: _angular_core.WritableSignal<OctomapPgmGrid | null>;
     /** 用户点中的起点 / 终点格（吸附前的原始格）。 */
@@ -196,35 +225,12 @@ declare class Octomap2dPgmComponent implements OnChanges {
     private readonly goalCell;
     /** 最近一次「开始寻址」的结果；null 表示还没算，或端点 / 参数已经改过。 */
     protected readonly plan: _angular_core.WritableSignal<OctomapPgmPlan | null>;
-    /** 起点圆点半径（格）。只影响画出来的标记，不参与寻路。 */
-    protected readonly markerSize: _angular_core.WritableSignal<number>;
-    /** 起点吸附范围（米）：点中的起点不可走时，最多找这么远。默认跟终点范围一致。 */
-    protected readonly startSnapRadius: _angular_core.WritableSignal<number>;
-    /**
-     * 起点要求的最小净空（米）。比建图时的碰撞半径更严时，起点会被推到离障碍更远的
-     * 格子上；小于等于 `dogRadius` 时不生效（路线本身仍按碰撞半径膨胀）。
-     */
-    protected readonly startClearance: _angular_core.WritableSignal<number>;
-    /** 面板里的值一旦被用户改过，就不要再被宿主的新输入或自动默认值覆盖。 */
-    private startRadiusTouched;
-    private clearanceTouched;
-    private markerTouched;
-    protected readonly modeOptions: {
-        label: string;
-        hint: string;
-        value: OctomapPgmMode;
-    }[];
-    /** 表单事件只放需要从 DOM 上取值的处理器。 */
-    protected readonly on: {
-        mode: (event: Event) => void;
-        markerSize: (event: Event) => void;
-        startSnapRadius: (event: Event) => void;
-        startClearance: (event: Event) => void;
-    };
+    /** 设置输入的状态镜像；用信号驱动重绘与对外快照。 */
+    private readonly markerSizeState;
+    private readonly startSnapState;
+    private readonly startClearanceState;
     constructor();
     ngOnChanges(changes: SimpleChanges): void;
-    /** 当前口径的说明，显示在图例旁边。 */
-    protected modeHint(): string;
     /** 网格尺寸与分辨率，显示在工具条上。 */
     protected gridInfo(): string | null;
     /** 起点坐标。算过之后显示实际落脚点（吸附后的），否则显示点中的位置。 */
@@ -235,10 +241,11 @@ declare class Octomap2dPgmComponent implements OnChanges {
     protected canSearch(): boolean;
     /** 一句状态：缺什么、为什么失败、或者路多长。 */
     protected statusText(): string;
-    protected setMode(value: string): void;
+    /** 只读状态快照；宿主设置面板用。 */
+    viewState(): OctomapPgmViewState;
     /** 用户按下「开始寻址」：这时才真的跑一次规划。 */
-    protected runSearch(): void;
-    protected clearMarks(): void;
+    runSearch(): void;
+    clearMarks(): void;
     protected onPointerDown(event: PointerEvent): void;
     protected onContextMenu(event: MouseEvent): void;
     private rebuild;
@@ -264,7 +271,7 @@ declare class Octomap2dPgmComponent implements OnChanges {
      */
     private draw;
     static ɵfac: _angular_core.ɵɵFactoryDeclaration<Octomap2dPgmComponent, never>;
-    static ɵcmp: _angular_core.ɵɵComponentDeclaration<Octomap2dPgmComponent, "howell-octomap-2d-pgm", never, { "image": { "alias": "image"; "required": false; }; "resolution": { "alias": "resolution"; "required": false; }; "dogRadius": { "alias": "dogRadius"; "required": false; }; "goalRadius": { "alias": "goalRadius"; "required": false; }; "mode": { "alias": "mode"; "required": false; }; }, { "modeChange": "modeChange"; "pathChange": "pathChange"; }, never, never, true, never>;
+    static ɵcmp: _angular_core.ɵɵComponentDeclaration<Octomap2dPgmComponent, "howell-octomap-2d-pgm", never, { "image": { "alias": "image"; "required": false; }; "resolution": { "alias": "resolution"; "required": false; }; "dogRadius": { "alias": "dogRadius"; "required": false; }; "goalRadius": { "alias": "goalRadius"; "required": false; }; "mode": { "alias": "mode"; "required": false; }; "markerSize": { "alias": "markerSize"; "required": false; }; "startSnapRadius": { "alias": "startSnapRadius"; "required": false; }; "startClearance": { "alias": "startClearance"; "required": false; }; }, { "pathChange": "pathChange"; }, never, never, true, never>;
 }
 
 /**
@@ -366,5 +373,5 @@ declare function pgmCellToWorld(grid: OctomapPgmGrid, cell: number): [number, nu
 declare function pgmWorldToCell(grid: OctomapPgmGrid, x: number, z: number): number | null;
 
 export { OCTOMAP_PGM_DEFAULT_DOG_RADIUS, OCTOMAP_PGM_DEFAULT_GOAL_RADIUS, OCTOMAP_PGM_DEFAULT_RESOLUTION, OCTOMAP_PGM_MODE_LABELS, Octomap2dPgmComponent, PGM_DARK_MAX, PGM_FREE, PGM_FREE_MIN, PGM_OCCUPIED, buildPgmGrid, decodePgm, encodePgm, findPgmPath, inflateBlocked, pgmCellToWorld, pgmWorldToCell, planPgmPath, searchPgmPath, smoothPgmPath, snapToFree };
-export type { OctomapPgmFailure, OctomapPgmGrid, OctomapPgmMode, OctomapPgmPath, OctomapPgmPlan, OctomapPgmPlanOptions, OctomapProjection, PgmSearchResult };
+export type { OctomapPgmFailure, OctomapPgmGrid, OctomapPgmMode, OctomapPgmPath, OctomapPgmPlan, OctomapPgmPlanOptions, OctomapPgmViewState, OctomapProjection, PgmSearchResult };
 //# sourceMappingURL=howell-octomap-2d.d.ts.map
