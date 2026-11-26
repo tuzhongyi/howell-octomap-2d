@@ -500,24 +500,22 @@ export class Octomap2dPgmComponent implements OnChanges {
 
     const image = context.createImageData(grid.width, grid.height);
     const data = image.data;
-    for (let i = 0; i < grid.blocked.length; i++) {
+    for (let i = 0; i < grid.base.length; i++) {
       const p = i * 4;
-      if (grid.rawBlocked[i] !== 0) {
-        // 原始障碍：深灰，不用纯黑——路径与端点要压在上面才看得清。
-        data[p] = 31;
-        data[p + 1] = 41;
-        data[p + 2] = 55;
-      } else if (grid.blocked[i] !== 0) {
-        // 只因为碰撞半径而不可走的格子：浅红。调小半径时它会缩回去，用户能直接
-        // 看到「小狗的碰撞」在二维图上值多少格。
-        data[p] = 254;
-        data[p + 1] = 202;
-        data[p + 2] = 202;
-      } else {
-        data[p] = 248;
-        data[p + 1] = 250;
-        data[p + 2] = 252;
+      const v = grid.base[i];
+      // 底图保持 PGM 原始灰度：切通行口径只改「哪些格算障碍」，不再翻转黑白。
+      let r = v;
+      let g = v;
+      let b = v;
+      if (grid.rawBlocked[i] === 0 && grid.blocked[i] !== 0) {
+        // 只因为碰撞半径而不可走的格子：叠一层半透明浅红，原图仍然透得出来。
+        r = Math.round(v * 0.55 + 254 * 0.45);
+        g = Math.round(v * 0.55 + 202 * 0.45);
+        b = Math.round(v * 0.55 + 202 * 0.45);
       }
+      data[p] = r;
+      data[p + 1] = g;
+      data[p + 2] = b;
       data[p + 3] = 255;
     }
     context.putImageData(image, 0, 0);

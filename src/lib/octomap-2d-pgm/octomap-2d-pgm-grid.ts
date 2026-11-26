@@ -119,6 +119,10 @@ export function buildPgmGrid(
       ? sourceBlocked
       : reduceBlocked(sourceBlocked, image.width, image.height, width, height, scale);
   const blocked = inflateBlocked(rawBlocked, width, height, options.dogRadius, resolution);
+  const base =
+    scale === 1
+      ? image.data
+      : reduceBase(image.data, image.width, image.height, width, height, scale);
   return {
     width,
     height,
@@ -129,6 +133,7 @@ export function buildPgmGrid(
     dogRadius: options.dogRadius,
     rawBlocked,
     blocked,
+    base,
   };
 }
 
@@ -139,6 +144,41 @@ function downsampleScale(width: number, height: number): number {
     scale++;
   }
   return scale;
+}
+
+/**
+ * 把 `scale × scale` 的像素块压成一格底图：取块内**最暗**的像素。
+ *
+ * 黑（有点/墙）在视觉上更值得保留；取最暗不会让细墙和稀疏点被白色稀释掉。
+ */
+function reduceBase(
+  source: Uint8Array,
+  sourceWidth: number,
+  sourceHeight: number,
+  width: number,
+  height: number,
+  scale: number,
+): Uint8Array {
+  const out = new Uint8Array(width * height);
+  for (let row = 0; row < height; row++) {
+    const rowStart = row * scale;
+    const rowEnd = Math.min(sourceHeight, rowStart + scale);
+    for (let col = 0; col < width; col++) {
+      const colStart = col * scale;
+      const colEnd = Math.min(sourceWidth, colStart + scale);
+      let darkest = 255;
+      for (let r = rowStart; r < rowEnd; r++) {
+        const base = r * sourceWidth;
+        for (let c = colStart; c < colEnd; c++) {
+          if (source[base + c] < darkest) {
+            darkest = source[base + c];
+          }
+        }
+      }
+      out[row * width + col] = darkest;
+    }
+  }
+  return out;
 }
 
 /** 把 `scale × scale` 的像素块压成一格：块里只要有一个障碍，这一格就是障碍。 */

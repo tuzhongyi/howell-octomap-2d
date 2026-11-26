@@ -63,6 +63,13 @@ export interface OctomapPgmGrid {
   rawBlocked: Uint8Array;
   /** 按 `dogRadius + 半格` 膨胀后的不可通行格。 */
   blocked: Uint8Array;
+  /**
+   * 底图：降采样后的原始灰度（每格取块内最暗的像素）。
+   *
+   * 绘制时先铺这一层，再叠碰撞膨胀/路径/端点。它**不随通行口径变化**——切
+   * `mode` 只改哪些格算障碍，不改 PGM 自己的黑白。
+   */
+  base: Uint8Array;
 }
 
 /** 规划成功后的路径。 */

@@ -28,6 +28,7 @@ import { Octomap2dPgmComponent, OctomapProjection, decodePgm } from 'howell-octo
 - 方法：`runSearch()`、`clearMarks()`、`viewState()`
 - `viewState()` 返回 `OctomapPgmViewState`（网格、起终点、状态文案、实际圆点大小），宿主据此画自己的设置面板
 - 画布支持滚轮以指针为中心缩放、左键拖动平移；单击（不拖动）才落起点/终点
+- 底图始终按 PGM 原始灰度显示；`mode` 只影响可走判定与碰撞膨胀，不翻转黑白
 - 左键设起点、右键设终点；算路由宿主调用 `runSearch()`
 
 ## 开发
