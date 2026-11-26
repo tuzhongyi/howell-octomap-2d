@@ -228,6 +228,13 @@ declare class Octomap2dPgmComponent implements OnChanges, OnDestroy {
     allowZoom: boolean;
     /** 视口背景色；默认透明，宿主的背景会透出来。 */
     backgroundColor: string;
+    /**
+     * 是否绘制 PGM 底图。
+     *
+     * 关掉后画布透明，但图像仍在内存里：点击、建图、寻路、路径输出全照常。适合宿主
+     * 自己画底图、只借用这层寻路与端点交互的场合。
+     */
+    showImage: boolean;
     /** 起点标记图片（URL / data URL）；为空或加载失败时用默认绿色圆点。 */
     startImage: string | null;
     /** 终点标记图片；为空或加载失败时用默认橙色圆点。 */
@@ -314,7 +321,7 @@ declare class Octomap2dPgmComponent implements OnChanges, OnDestroy {
      */
     private draw;
     static ɵfac: _angular_core.ɵɵFactoryDeclaration<Octomap2dPgmComponent, never>;
-    static ɵcmp: _angular_core.ɵɵComponentDeclaration<Octomap2dPgmComponent, "howell-octomap-2d-pgm", never, { "image": { "alias": "image"; "required": false; }; "resolution": { "alias": "resolution"; "required": false; }; "dogRadius": { "alias": "dogRadius"; "required": false; }; "goalRadius": { "alias": "goalRadius"; "required": false; }; "mode": { "alias": "mode"; "required": false; }; "markerSize": { "alias": "markerSize"; "required": false; }; "startSnapRadius": { "alias": "startSnapRadius"; "required": false; }; "startClearance": { "alias": "startClearance"; "required": false; }; "allowPan": { "alias": "allowPan"; "required": false; }; "allowZoom": { "alias": "allowZoom"; "required": false; }; "backgroundColor": { "alias": "backgroundColor"; "required": false; }; "startImage": { "alias": "startImage"; "required": false; }; "goalImage": { "alias": "goalImage"; "required": false; }; }, { "pathChange": "pathChange"; "pathComputed": "pathComputed"; }, never, never, true, never>;
+    static ɵcmp: _angular_core.ɵɵComponentDeclaration<Octomap2dPgmComponent, "howell-octomap-2d-pgm", never, { "image": { "alias": "image"; "required": false; }; "resolution": { "alias": "resolution"; "required": false; }; "dogRadius": { "alias": "dogRadius"; "required": false; }; "goalRadius": { "alias": "goalRadius"; "required": false; }; "mode": { "alias": "mode"; "required": false; }; "markerSize": { "alias": "markerSize"; "required": false; }; "startSnapRadius": { "alias": "startSnapRadius"; "required": false; }; "startClearance": { "alias": "startClearance"; "required": false; }; "allowPan": { "alias": "allowPan"; "required": false; }; "allowZoom": { "alias": "allowZoom"; "required": false; }; "backgroundColor": { "alias": "backgroundColor"; "required": false; }; "showImage": { "alias": "showImage"; "required": false; }; "startImage": { "alias": "startImage"; "required": false; }; "goalImage": { "alias": "goalImage"; "required": false; }; }, { "pathChange": "pathChange"; "pathComputed": "pathComputed"; }, never, never, true, never>;
 }
 
 /**

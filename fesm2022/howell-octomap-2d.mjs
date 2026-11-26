@@ -786,6 +786,13 @@ class Octomap2dPgmComponent {
     allowZoom = true;
     /** 视口背景色；默认透明，宿主的背景会透出来。 */
     backgroundColor = 'transparent';
+    /**
+     * 是否绘制 PGM 底图。
+     *
+     * 关掉后画布透明，但图像仍在内存里：点击、建图、寻路、路径输出全照常。适合宿主
+     * 自己画底图、只借用这层寻路与端点交互的场合。
+     */
+    showImage = true;
     /** 起点标记图片（URL / data URL）；为空或加载失败时用默认绿色圆点。 */
     startImage = null;
     /** 终点标记图片；为空或加载失败时用默认橙色圆点。 */
@@ -852,6 +859,9 @@ class Octomap2dPgmComponent {
         }
         if (changes['startImage'] || changes['goalImage']) {
             this.loadMarkerImages();
+        }
+        if (changes['showImage']) {
+            this.draw();
         }
         if (rebuild) {
             this.rebuild();
@@ -1210,27 +1220,33 @@ class Octomap2dPgmComponent {
         if (!context) {
             return;
         }
-        const image = context.createImageData(grid.width, grid.height);
-        const data = image.data;
-        for (let i = 0; i < grid.base.length; i++) {
-            const p = i * 4;
-            const v = grid.base[i];
-            // 底图保持 PGM 原始灰度：切通行口径只改「哪些格算障碍」，不再翻转黑白。
-            let r = v;
-            let g = v;
-            let b = v;
-            if (grid.rawBlocked[i] === 0 && grid.blocked[i] !== 0) {
-                // 只因为碰撞半径而不可走的格子：叠一层半透明浅红，原图仍然透得出来。
-                r = Math.round(v * 0.55 + 254 * 0.45);
-                g = Math.round(v * 0.55 + 202 * 0.45);
-                b = Math.round(v * 0.55 + 202 * 0.45);
+        if (this.showImage) {
+            const image = context.createImageData(grid.width, grid.height);
+            const data = image.data;
+            for (let i = 0; i < grid.base.length; i++) {
+                const p = i * 4;
+                const v = grid.base[i];
+                // 底图保持 PGM 原始灰度：切通行口径只改「哪些格算障碍」，不再翻转黑白。
+                let r = v;
+                let g = v;
+                let b = v;
+                if (grid.rawBlocked[i] === 0 && grid.blocked[i] !== 0) {
+                    // 只因为碰撞半径而不可走的格子：叠一层半透明浅红，原图仍然透得出来。
+                    r = Math.round(v * 0.55 + 254 * 0.45);
+                    g = Math.round(v * 0.55 + 202 * 0.45);
+                    b = Math.round(v * 0.55 + 202 * 0.45);
+                }
+                data[p] = r;
+                data[p + 1] = g;
+                data[p + 2] = b;
+                data[p + 3] = 255;
             }
-            data[p] = r;
-            data[p + 1] = g;
-            data[p + 2] = b;
-            data[p + 3] = 255;
+            context.putImageData(image, 0, 0);
         }
-        context.putImageData(image, 0, 0);
+        else {
+            // 不画底图，但网格/图像都还在；只留路径与端点浮在这张透明画布上。
+            context.clearRect(0, 0, grid.width, grid.height);
+        }
         const plan = this.plan();
         const thinLine = Math.max(1.2, Math.min(grid.width, grid.height) / 220);
         context.lineCap = 'round';
@@ -1304,7 +1320,7 @@ class Octomap2dPgmComponent {
         }
     }
     static ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "21.2.26", ngImport: i0, type: Octomap2dPgmComponent, deps: [], target: i0.ɵɵFactoryTarget.Component });
-    static ɵcmp = i0.ɵɵngDeclareComponent({ minVersion: "17.2.0", version: "21.2.26", type: Octomap2dPgmComponent, isStandalone: true, selector: "howell-octomap-2d-pgm", inputs: { image: "image", resolution: "resolution", dogRadius: "dogRadius", goalRadius: "goalRadius", mode: "mode", markerSize: "markerSize", startSnapRadius: "startSnapRadius", startClearance: "startClearance", allowPan: "allowPan", allowZoom: "allowZoom", backgroundColor: "backgroundColor", startImage: "startImage", goalImage: "goalImage" }, outputs: { pathChange: "pathChange", pathComputed: "pathComputed" }, viewQueries: [{ propertyName: "canvasRef", first: true, predicate: ["canvas"], descendants: true, isSignal: true }, { propertyName: "viewportRef", first: true, predicate: ["viewport"], descendants: true, isSignal: true }], usesOnChanges: true, ngImport: i0, template: "<div\n  #viewport\n  class=\"octomap-2d-pgm__viewport\"\n  [style.background]=\"backgroundColor\"\n  (pointerdown)=\"onPointerDown($event)\"\n  (pointermove)=\"onPointerMove($event)\"\n  (pointerup)=\"onPointerUp($event)\"\n  (pointercancel)=\"onPointerCancel($event)\"\n  (wheel)=\"onWheel($event)\"\n  (contextmenu)=\"onContextMenu($event)\"\n>\n  <canvas\n    #canvas\n    class=\"octomap-2d-pgm__canvas\"\n    [style.transform]=\"viewTransform()\"\n  ></canvas>\n</div>\n", styles: [":host{display:block;width:100%;height:100%;min-height:0;overflow:hidden}.octomap-2d-pgm__viewport{position:relative;width:100%;height:100%;overflow:hidden;cursor:grab;touch-action:none}.octomap-2d-pgm__viewport:active{cursor:grabbing}.octomap-2d-pgm__canvas{display:block;width:100%;height:100%;object-fit:contain;image-rendering:pixelated;transform-origin:0 0;pointer-events:none;will-change:transform}\n"], changeDetection: i0.ChangeDetectionStrategy.OnPush });
+    static ɵcmp = i0.ɵɵngDeclareComponent({ minVersion: "17.2.0", version: "21.2.26", type: Octomap2dPgmComponent, isStandalone: true, selector: "howell-octomap-2d-pgm", inputs: { image: "image", resolution: "resolution", dogRadius: "dogRadius", goalRadius: "goalRadius", mode: "mode", markerSize: "markerSize", startSnapRadius: "startSnapRadius", startClearance: "startClearance", allowPan: "allowPan", allowZoom: "allowZoom", backgroundColor: "backgroundColor", showImage: "showImage", startImage: "startImage", goalImage: "goalImage" }, outputs: { pathChange: "pathChange", pathComputed: "pathComputed" }, viewQueries: [{ propertyName: "canvasRef", first: true, predicate: ["canvas"], descendants: true, isSignal: true }, { propertyName: "viewportRef", first: true, predicate: ["viewport"], descendants: true, isSignal: true }], usesOnChanges: true, ngImport: i0, template: "<div\n  #viewport\n  class=\"octomap-2d-pgm__viewport\"\n  [style.background]=\"backgroundColor\"\n  (pointerdown)=\"onPointerDown($event)\"\n  (pointermove)=\"onPointerMove($event)\"\n  (pointerup)=\"onPointerUp($event)\"\n  (pointercancel)=\"onPointerCancel($event)\"\n  (wheel)=\"onWheel($event)\"\n  (contextmenu)=\"onContextMenu($event)\"\n>\n  <canvas\n    #canvas\n    class=\"octomap-2d-pgm__canvas\"\n    [style.transform]=\"viewTransform()\"\n  ></canvas>\n</div>\n", styles: [":host{display:block;width:100%;height:100%;min-height:0;overflow:hidden}.octomap-2d-pgm__viewport{position:relative;width:100%;height:100%;overflow:hidden;cursor:grab;touch-action:none}.octomap-2d-pgm__viewport:active{cursor:grabbing}.octomap-2d-pgm__canvas{display:block;width:100%;height:100%;object-fit:contain;image-rendering:pixelated;transform-origin:0 0;pointer-events:none;will-change:transform}\n"], changeDetection: i0.ChangeDetectionStrategy.OnPush });
 }
 i0.ɵɵngDeclareClassMetadata({ minVersion: "12.0.0", version: "21.2.26", ngImport: i0, type: Octomap2dPgmComponent, decorators: [{
             type: Component,
@@ -1330,6 +1346,8 @@ i0.ɵɵngDeclareClassMetadata({ minVersion: "12.0.0", version: "21.2.26", ngImpo
             }], allowZoom: [{
                 type: Input
             }], backgroundColor: [{
+                type: Input
+            }], showImage: [{
                 type: Input
             }], startImage: [{
                 type: Input
