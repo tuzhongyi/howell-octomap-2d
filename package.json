@@ -1,0 +1,22 @@
+{
+  "name": "howell-octomap-2d",
+  "version": "0.0.1",
+  "description": "OctoMap 二维寻路组件（PGM 占用图），Angular 组件库",
+  "sideEffects": false,
+  "scripts": {
+    "build": "ng-packagr -p ng-package.json -c tsconfig.lib.json"
+  },
+  "peerDependencies": {
+    "@angular/core": "^21.0.0"
+  },
+  "dependencies": {
+    "tslib": "^2.3.0"
+  },
+  "devDependencies": {
+    "@angular/compiler-cli": "^21.2.0",
+    "@angular/core": "^21.2.0",
+    "less": "^4.2.0",
+    "ng-packagr": "^21.2.0",
+    "typescript": "~5.9.2"
+  }
+}

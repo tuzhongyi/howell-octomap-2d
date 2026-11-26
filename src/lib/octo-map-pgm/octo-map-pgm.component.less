@@ -1,0 +1,290 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  color: #e6edf7;
+  background: #0b1016;
+  color-scheme: dark;
+}
+
+.pgm {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+
+  &__bar {
+    flex: 0 0 auto;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 14px;
+    padding: 10px 16px;
+    background: #141a24;
+    border-bottom: 1px solid #232b3a;
+  }
+
+  &__field {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  &__label {
+    font-size: 13px;
+    color: #8b98ad;
+  }
+
+  &__control {
+    padding: 6px 10px;
+    font-size: 13px;
+    color: #e6edf7;
+    background: #1d2635;
+    border: 1px solid #2a3448;
+    border-radius: 6px;
+  }
+
+  &__readout {
+    font-size: 13px;
+    color: #8b98ad;
+    white-space: nowrap;
+  }
+
+  &__info {
+    margin-left: auto;
+    font-size: 12px;
+    color: #6b7a91;
+    white-space: nowrap;
+  }
+
+  &__button {
+    padding: 7px 14px;
+    font-size: 13px;
+    color: #e6edf7;
+    background: #2b6cb0;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+
+    &:hover:not(:disabled) {
+      background: #3380d0;
+    }
+
+    &:disabled {
+      color: #6b7a91;
+      background: #263243;
+      cursor: not-allowed;
+    }
+
+    &--go {
+      margin-top: 4px;
+      font-weight: 600;
+    }
+
+    &--ghost {
+      background: transparent;
+      color: #8b98ad;
+      border: 1px solid #2a3448;
+
+      &:hover:not(:disabled) {
+        background: #1d2635;
+        color: #e6edf7;
+      }
+    }
+  }
+
+  &__main {
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  &__panel {
+    flex: 0 0 236px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 14px;
+    overflow-y: auto;
+    background: #10161f;
+    border-right: 1px solid #232b3a;
+  }
+
+  &__panel-title {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: #8b98ad;
+  }
+
+  &__coords {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px;
+    background: #141a24;
+    border: 1px solid #232b3a;
+    border-radius: 8px;
+  }
+
+  &__coord {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 12px;
+  }
+
+  &__coord-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: #8b98ad;
+  }
+
+  &__coord-value {
+    color: #e6edf7;
+    font-variant-numeric: tabular-nums;
+  }
+
+  &__dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+
+    &--start {
+      background: #16a34a;
+    }
+
+    &--goal {
+      background: #f59e0b;
+    }
+  }
+
+  &__param {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  &__param-label {
+    font-size: 12px;
+    color: #8b98ad;
+  }
+
+  &__number {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 6px 8px;
+    font-size: 13px;
+    color: #e6edf7;
+    background: #1d2635;
+    border: 1px solid #2a3448;
+    border-radius: 6px;
+  }
+
+  &__status {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.5;
+    color: #aab6c8;
+    word-break: break-word;
+  }
+
+  &__viewport {
+    position: relative;
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    background: #0b1016;
+  }
+
+  &__canvas {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    image-rendering: pixelated;
+    cursor: crosshair;
+
+    // 没图时把元素让开，别在提示文字后面留一块可点的空画布。
+    &--empty {
+      display: none;
+    }
+  }
+
+  &__empty {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0;
+    padding: 24px;
+    font-size: 14px;
+    color: #8b98ad;
+    text-align: center;
+  }
+
+  &__legend {
+    flex: 0 0 auto;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 10px;
+    padding: 8px 16px 12px;
+    background: #141a24;
+  }
+
+  &__swatch {
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+
+    &--free {
+      background: #f8fafc;
+    }
+
+    &--obstacle {
+      background: #1f2937;
+    }
+
+    &--inflated {
+      background: #fecaca;
+    }
+
+    &--path {
+      background: #2563eb;
+    }
+
+    &--stuck {
+      background: #dc2626;
+    }
+
+    &--start {
+      background: #16a34a;
+    }
+
+    &--goal {
+      background: #f59e0b;
+    }
+  }
+
+  &__legend-text {
+    font-size: 12px;
+    color: #8b98ad;
+  }
+
+  &__hint {
+    flex: 1 1 100%;
+    font-size: 12px;
+    color: #6b7a91;
+  }
+}
