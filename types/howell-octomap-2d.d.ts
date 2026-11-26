@@ -165,7 +165,7 @@ declare const OCTO_MAP_PGM_DEFAULT_GOAL_RADIUS = 0.5;
  * 自己冒出来，调参数也不会悄悄重算——参数改过就把旧结果清掉，让用户知道该再点一次。
  * 走不通时不只是报错：A* 记下能走到的最远处，面板和画布会标出卡在哪一格。
  */
-declare class OctoMapPgmComponent implements OnChanges {
+declare class Octomap2dPgmComponent implements OnChanges {
     /** 要寻路的 PGM 图像；为空时只显示一句提示。 */
     image: OctoMapProjection | null;
     /** 一格对应多少米。PGM 文件头不带比例尺，只能由宿主给。 */
@@ -263,8 +263,8 @@ declare class OctoMapPgmComponent implements OnChanges {
      * 终点的虚线——虚线标出的是最后没打通的那一段，不是路。
      */
     private draw;
-    static ɵfac: _angular_core.ɵɵFactoryDeclaration<OctoMapPgmComponent, never>;
-    static ɵcmp: _angular_core.ɵɵComponentDeclaration<OctoMapPgmComponent, "howell-octomap-2d-pgm", never, { "image": { "alias": "image"; "required": false; }; "resolution": { "alias": "resolution"; "required": false; }; "dogRadius": { "alias": "dogRadius"; "required": false; }; "goalRadius": { "alias": "goalRadius"; "required": false; }; "mode": { "alias": "mode"; "required": false; }; }, { "modeChange": "modeChange"; "pathChange": "pathChange"; }, never, never, true, never>;
+    static ɵfac: _angular_core.ɵɵFactoryDeclaration<Octomap2dPgmComponent, never>;
+    static ɵcmp: _angular_core.ɵɵComponentDeclaration<Octomap2dPgmComponent, "howell-octomap-2d-pgm", never, { "image": { "alias": "image"; "required": false; }; "resolution": { "alias": "resolution"; "required": false; }; "dogRadius": { "alias": "dogRadius"; "required": false; }; "goalRadius": { "alias": "goalRadius"; "required": false; }; "mode": { "alias": "mode"; "required": false; }; }, { "modeChange": "modeChange"; "pathChange": "pathChange"; }, never, never, true, never>;
 }
 
 /**
@@ -365,6 +365,6 @@ declare function pgmCellToWorld(grid: OctoMapPgmGrid, cell: number): [number, nu
  */
 declare function pgmWorldToCell(grid: OctoMapPgmGrid, x: number, z: number): number | null;
 
-export { OCTO_MAP_PGM_DEFAULT_DOG_RADIUS, OCTO_MAP_PGM_DEFAULT_GOAL_RADIUS, OCTO_MAP_PGM_DEFAULT_RESOLUTION, OCTO_MAP_PGM_MODE_LABELS, OctoMapPgmComponent, PGM_DARK_MAX, PGM_FREE, PGM_FREE_MIN, PGM_OCCUPIED, buildPgmGrid, decodePgm, encodePgm, findPgmPath, inflateBlocked, pgmCellToWorld, pgmWorldToCell, planPgmPath, searchPgmPath, smoothPgmPath, snapToFree };
+export { OCTO_MAP_PGM_DEFAULT_DOG_RADIUS, OCTO_MAP_PGM_DEFAULT_GOAL_RADIUS, OCTO_MAP_PGM_DEFAULT_RESOLUTION, OCTO_MAP_PGM_MODE_LABELS, Octomap2dPgmComponent, PGM_DARK_MAX, PGM_FREE, PGM_FREE_MIN, PGM_OCCUPIED, buildPgmGrid, decodePgm, encodePgm, findPgmPath, inflateBlocked, pgmCellToWorld, pgmWorldToCell, planPgmPath, searchPgmPath, smoothPgmPath, snapToFree };
 export type { OctoMapPgmFailure, OctoMapPgmGrid, OctoMapPgmMode, OctoMapPgmPath, OctoMapPgmPlan, OctoMapPgmPlanOptions, OctoMapProjection, PgmSearchResult };
 //# sourceMappingURL=howell-octomap-2d.d.ts.map
