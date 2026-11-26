@@ -93,6 +93,14 @@ export class Octomap2dPgmComponent implements OnChanges, OnDestroy {
   /** 视口背景色；默认透明，宿主的背景会透出来。 */
   @Input() backgroundColor = 'transparent';
 
+  /**
+   * 是否绘制 PGM 底图。
+   *
+   * 关掉后画布透明，但图像仍在内存里：点击、建图、寻路、路径输出全照常。适合宿主
+   * 自己画底图、只借用这层寻路与端点交互的场合。
+   */
+  @Input() showImage = true;
+
   /** 起点标记图片（URL / data URL）；为空或加载失败时用默认绿色圆点。 */
   @Input() startImage: string | null = null;
 
@@ -184,6 +192,9 @@ export class Octomap2dPgmComponent implements OnChanges, OnDestroy {
     }
     if (changes['startImage'] || changes['goalImage']) {
       this.loadMarkerImages();
+    }
+    if (changes['showImage']) {
+      this.draw();
     }
     if (rebuild) {
       this.rebuild();
@@ -575,27 +586,32 @@ export class Octomap2dPgmComponent implements OnChanges, OnDestroy {
       return;
     }
 
-    const image = context.createImageData(grid.width, grid.height);
-    const data = image.data;
-    for (let i = 0; i < grid.base.length; i++) {
-      const p = i * 4;
-      const v = grid.base[i];
-      // 底图保持 PGM 原始灰度：切通行口径只改「哪些格算障碍」，不再翻转黑白。
-      let r = v;
-      let g = v;
-      let b = v;
-      if (grid.rawBlocked[i] === 0 && grid.blocked[i] !== 0) {
-        // 只因为碰撞半径而不可走的格子：叠一层半透明浅红，原图仍然透得出来。
-        r = Math.round(v * 0.55 + 254 * 0.45);
-        g = Math.round(v * 0.55 + 202 * 0.45);
-        b = Math.round(v * 0.55 + 202 * 0.45);
+    if (this.showImage) {
+      const image = context.createImageData(grid.width, grid.height);
+      const data = image.data;
+      for (let i = 0; i < grid.base.length; i++) {
+        const p = i * 4;
+        const v = grid.base[i];
+        // 底图保持 PGM 原始灰度：切通行口径只改「哪些格算障碍」，不再翻转黑白。
+        let r = v;
+        let g = v;
+        let b = v;
+        if (grid.rawBlocked[i] === 0 && grid.blocked[i] !== 0) {
+          // 只因为碰撞半径而不可走的格子：叠一层半透明浅红，原图仍然透得出来。
+          r = Math.round(v * 0.55 + 254 * 0.45);
+          g = Math.round(v * 0.55 + 202 * 0.45);
+          b = Math.round(v * 0.55 + 202 * 0.45);
+        }
+        data[p] = r;
+        data[p + 1] = g;
+        data[p + 2] = b;
+        data[p + 3] = 255;
       }
-      data[p] = r;
-      data[p + 1] = g;
-      data[p + 2] = b;
-      data[p + 3] = 255;
+      context.putImageData(image, 0, 0);
+    } else {
+      // 不画底图，但网格/图像都还在；只留路径与端点浮在这张透明画布上。
+      context.clearRect(0, 0, grid.width, grid.height);
     }
-    context.putImageData(image, 0, 0);
 
     const plan = this.plan();
     const thinLine = Math.max(1.2, Math.min(grid.width, grid.height) / 220);

@@ -24,12 +24,13 @@ import { Octomap2dPgmComponent, OctomapProjection, decodePgm } from 'howell-octo
 
 二维组件**只负责画布与寻路逻辑，不带设置界面**：
 
-- 输入：`image`、`resolution`、`dogRadius`、`goalRadius`、`mode`、`markerSize`、`startSnapRadius`、`startClearance`、`allowPan`、`allowZoom`、`backgroundColor`、`startImage`、`goalImage`
+- 输入：`image`、`resolution`、`dogRadius`、`goalRadius`、`mode`、`markerSize`、`startSnapRadius`、`startClearance`、`allowPan`、`allowZoom`、`showImage`、`backgroundColor`、`startImage`、`goalImage`
 - 输出：`pathChange`（完整规划 `OctomapPgmPlan`）、`pathComputed`（世界坐标路径 `OctomapPgmPath`；失败或清除时为 `null`）
 - 方法：`runSearch()`、`clearMarks()`、`viewState()`
 - `viewState()` 返回 `OctomapPgmViewState`（网格、起终点、状态文案、实际圆点大小），宿主据此画自己的设置面板
 - 画布支持滚轮以指针为中心缩放、左键拖动平移；`allowPan` / `allowZoom` 可分别关掉
 - 单击（不拖动）才落起点/终点；`backgroundColor` 默认 `transparent`，宿主背景会透出来
+- `showImage=false` 不画 PGM 底图，但图像仍在内存里，点击、寻路和路径输出照常
 - `startImage` / `goalImage` 传图片 URL 时替换默认圆点；为空或加载失败时保留默认形状
 - 底图始终按 PGM 原始灰度显示；`mode` 只影响可走判定与碰撞膨胀，不翻转黑白
 - 左键设起点、右键设终点；算路由宿主调用 `runSearch()`
