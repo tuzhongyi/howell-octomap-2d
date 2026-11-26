@@ -35,6 +35,36 @@ import { Octomap2dPgmComponent, OctomapProjection, decodePgm } from 'howell-octo
 - 底图始终按 PGM 原始灰度显示；`mode` 只影响可走判定与碰撞膨胀，不翻转黑白
 - 左键设起点、右键设终点；算路由宿主调用 `runSearch()`
 
+## Headless（不渲染界面）
+
+不需要组件和画布时，直接用 `planPgmImage`：
+
+```ts
+import { planPgmImage } from 'howell-octomap-2d';
+
+const { grid, plan } = planPgmImage(
+  image,                       // OctomapProjection（decodePgm 解出来的）
+  { col: 10, row: 20 },        // 起点：图像像素坐标；也可 { x, z } 世界坐标
+  { col: 120, row: 80 },       // 终点
+  {
+    mode: 'freeWalkable',
+    dogRadius: 0.25,
+    resolution: 0.05,
+    goalRadius: 0.5,
+    startSnapRadius: 0.4,
+    startClearance: 0.25,
+  },
+);
+
+if (plan.path) {
+  console.log(plan.path.world); // [x, y, z][]，世界坐标
+} else {
+  console.log(plan.reason);     // 'noStart' | 'noGoal' | 'blockedStart' | 'blockedGoal' | 'unreachable'
+}
+```
+
+`planPgmImage` 只做「建图 + 规划」，不创建 Angular 组件、不碰 canvas。像素坐标按降采样后的网格尺寸自动换算；落在图外时 `plan.reason` 是 `noStart` / `noGoal`。
+
 ## 开发
 
 ```bash

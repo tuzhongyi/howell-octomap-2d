@@ -661,3 +661,70 @@ export function pgmWorldToCell(
   }
   return (grid.height - 1 - zCell) * grid.width + col;
 }
+
+/**
+ * Headless 入口：图像 + 起点/终点 → 网格 + 规划结果。
+ *
+ * 不创建组件、不碰画布，适合宿主自己提供图片和端点、只取寻路结果。起点/终点可给：
+ *
+ * - 图像像素坐标 `{ col, row }`（row 0 是图像顶部）；
+ * - 世界坐标 `{ x, z }`（米，与 `path.world` 同一套）。
+ *
+ * 像素会按降采样后的网格尺寸换算；落在图外时 `plan.reason` 是 `noStart` / `noGoal`。
+ */
+export interface OctomapPgmHeadlessOptions extends OctomapPgmPlanOptions {
+  /** 终点吸附范围（米）。 */
+  goalRadius: number;
+  /** 起点吸附范围（米）；默认同 `goalRadius`。 */
+  startSnapRadius?: number;
+  /** 起点要求的最小净空（米）；默认不额外要求。 */
+  startClearance?: number;
+}
+
+export interface OctomapPgmHeadlessResult {
+  grid: OctomapPgmGrid;
+  plan: OctomapPgmPlan;
+}
+
+export type OctomapPgmPoint =
+  | { col: number; row: number }
+  | { x: number; z: number };
+
+export function planPgmImage(
+  image: OctomapProjection,
+  start: OctomapPgmPoint,
+  goal: OctomapPgmPoint,
+  options: OctomapPgmHeadlessOptions,
+): OctomapPgmHeadlessResult {
+  const grid = buildPgmGrid(image, options);
+  const startCell = toPgmCell(image, grid, start);
+  const goalCell = toPgmCell(image, grid, goal);
+  const plan = planPgmPath(
+    grid,
+    startCell,
+    goalCell,
+    options.goalRadius,
+    options.startSnapRadius,
+    options.startClearance,
+  );
+  return { grid, plan };
+}
+
+function toPgmCell(
+  image: OctomapProjection,
+  grid: OctomapPgmGrid,
+  point: OctomapPgmPoint,
+): number | null {
+  if ('col' in point) {
+    if (!(image.width > 0) || !(image.height > 0)) {
+      return null;
+    }
+    const col = Math.floor((point.col * grid.width) / image.width);
+    const row = Math.floor((point.row * grid.height) / image.height);
+    if (col < 0 || col >= grid.width || row < 0 || row >= grid.height) {
+      return null;
+    }
+    return row * grid.width + col;
+  }
+  return pgmWorldToCell(grid, point.x, point.z);
+}
