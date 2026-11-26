@@ -46,7 +46,7 @@ import { buildPgmGrid, pgmCellToWorld, planPgmPath } from './octomap-2d-pgm-grid
   styleUrl: './octomap-2d-pgm.component.less',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class OctoMapPgmComponent implements OnChanges {
+export class Octomap2dPgmComponent implements OnChanges {
   /** 要寻路的 PGM 图像；为空时只显示一句提示。 */
   @Input() image: OctoMapProjection | null = null;
 

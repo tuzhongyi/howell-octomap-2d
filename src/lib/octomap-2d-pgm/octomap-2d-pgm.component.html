@@ -1,46 +1,46 @@
-<section class="pgm">
-  <header class="pgm__bar">
-    <label class="pgm__field">
-      <span class="pgm__label">通行口径</span>
-      <select class="pgm__control" [value]="activeMode()" (change)="on.mode($event)">
+<section class="octomap-2d-pgm">
+  <header class="octomap-2d-pgm__bar">
+    <label class="octomap-2d-pgm__field">
+      <span class="octomap-2d-pgm__label">通行口径</span>
+      <select class="octomap-2d-pgm__control" [value]="activeMode()" (change)="on.mode($event)">
         @for (option of modeOptions; track option.value) {
           <option [value]="option.value">{{ option.label }}</option>
         }
       </select>
     </label>
 
-    <span class="pgm__readout">碰撞半径 {{ dogRadius.toFixed(2) }} m</span>
-    <span class="pgm__readout">每格 {{ resolution.toFixed(2) }} m</span>
-    <span class="pgm__readout">终点范围 {{ goalRadius.toFixed(2) }} m</span>
+    <span class="octomap-2d-pgm__readout">碰撞半径 {{ dogRadius.toFixed(2) }} m</span>
+    <span class="octomap-2d-pgm__readout">每格 {{ resolution.toFixed(2) }} m</span>
+    <span class="octomap-2d-pgm__readout">终点范围 {{ goalRadius.toFixed(2) }} m</span>
 
     @if (gridInfo(); as info) {
-      <span class="pgm__info">{{ info }}</span>
+      <span class="octomap-2d-pgm__info">{{ info }}</span>
     }
   </header>
 
-  <div class="pgm__main">
-    <aside class="pgm__panel">
-      <h2 class="pgm__panel-title">寻路</h2>
+  <div class="octomap-2d-pgm__main">
+    <aside class="octomap-2d-pgm__panel">
+      <h2 class="octomap-2d-pgm__panel-title">寻路</h2>
 
-      <div class="pgm__coords">
-        <div class="pgm__coord">
-          <span class="pgm__coord-label">
-            <span class="pgm__dot pgm__dot--start"></span>起点
+      <div class="octomap-2d-pgm__coords">
+        <div class="octomap-2d-pgm__coord">
+          <span class="octomap-2d-pgm__coord-label">
+            <span class="octomap-2d-pgm__dot octomap-2d-pgm__dot--start"></span>起点
           </span>
-          <span class="pgm__coord-value">{{ startText() }}</span>
+          <span class="octomap-2d-pgm__coord-value">{{ startText() }}</span>
         </div>
-        <div class="pgm__coord">
-          <span class="pgm__coord-label">
-            <span class="pgm__dot pgm__dot--goal"></span>终点
+        <div class="octomap-2d-pgm__coord">
+          <span class="octomap-2d-pgm__coord-label">
+            <span class="octomap-2d-pgm__dot octomap-2d-pgm__dot--goal"></span>终点
           </span>
-          <span class="pgm__coord-value">{{ goalText() }}</span>
+          <span class="octomap-2d-pgm__coord-value">{{ goalText() }}</span>
         </div>
       </div>
 
-      <label class="pgm__param">
-        <span class="pgm__param-label" title="只影响画出来的圆点大小，不参与寻路。">起点大小（格）</span>
+      <label class="octomap-2d-pgm__param">
+        <span class="octomap-2d-pgm__param-label" title="只影响画出来的圆点大小，不参与寻路。">起点大小（格）</span>
         <input
-          class="pgm__number"
+          class="octomap-2d-pgm__number"
           type="number"
           min="1"
           step="1"
@@ -49,12 +49,12 @@
         />
       </label>
 
-      <label class="pgm__param">
-        <span class="pgm__param-label" title="起点落在不可走的格子上时，最多找这么远落脚。">
+      <label class="octomap-2d-pgm__param">
+        <span class="octomap-2d-pgm__param-label" title="起点落在不可走的格子上时，最多找这么远落脚。">
           起点吸附（m）
         </span>
         <input
-          class="pgm__number"
+          class="octomap-2d-pgm__number"
           type="number"
           min="0"
           step="0.05"
@@ -63,15 +63,15 @@
         />
       </label>
 
-      <label class="pgm__param">
+      <label class="octomap-2d-pgm__param">
         <span
-          class="pgm__param-label"
+          class="octomap-2d-pgm__param-label"
           title="起点周围要求的最小净空；不超过全局碰撞半径时不生效。"
         >
           起点碰撞（m）
         </span>
         <input
-          class="pgm__number"
+          class="octomap-2d-pgm__number"
           type="number"
           min="0"
           step="0.05"
@@ -81,7 +81,7 @@
       </label>
 
       <button
-        class="pgm__button pgm__button--go"
+        class="octomap-2d-pgm__button octomap-2d-pgm__button--go"
         type="button"
         [disabled]="!canSearch()"
         (click)="runSearch()"
@@ -89,43 +89,43 @@
         开始寻址
       </button>
 
-      <p class="pgm__status">{{ statusText() }}</p>
+      <p class="octomap-2d-pgm__status">{{ statusText() }}</p>
 
-      <button class="pgm__button pgm__button--ghost" type="button" (click)="clearMarks()">
+      <button class="octomap-2d-pgm__button octomap-2d-pgm__button--ghost" type="button" (click)="clearMarks()">
         清除起终点
       </button>
     </aside>
 
-    <div class="pgm__viewport">
+    <div class="octomap-2d-pgm__viewport">
       <canvas
         #canvas
-        class="pgm__canvas"
-        [class.pgm__canvas--empty]="!grid()"
+        class="octomap-2d-pgm__canvas"
+        [class.octomap-2d-pgm__canvas--empty]="!grid()"
         (pointerdown)="onPointerDown($event)"
         (contextmenu)="onContextMenu($event)"
       ></canvas>
       @if (!grid()) {
-        <p class="pgm__empty">还没有可用的 PGM 地图。先在工具条上加载一个 .pgm 文件。</p>
+        <p class="octomap-2d-pgm__empty">还没有可用的 PGM 地图。先在工具条上加载一个 .pgm 文件。</p>
       }
     </div>
   </div>
 
-  <div class="pgm__legend">
-    <span class="pgm__swatch pgm__swatch--free"></span>
-    <span class="pgm__legend-text">可走</span>
-    <span class="pgm__swatch pgm__swatch--obstacle"></span>
-    <span class="pgm__legend-text">障碍</span>
-    <span class="pgm__swatch pgm__swatch--inflated"></span>
-    <span class="pgm__legend-text">碰撞膨胀</span>
-    <span class="pgm__swatch pgm__swatch--path"></span>
-    <span class="pgm__legend-text">路径</span>
-    <span class="pgm__swatch pgm__swatch--stuck"></span>
-    <span class="pgm__legend-text">走不通（残段 / 卡点）</span>
-    <span class="pgm__swatch pgm__swatch--start"></span>
-    <span class="pgm__legend-text">起点（含足迹）</span>
-    <span class="pgm__swatch pgm__swatch--goal"></span>
-    <span class="pgm__legend-text">终点</span>
+  <div class="octomap-2d-pgm__legend">
+    <span class="octomap-2d-pgm__swatch octomap-2d-pgm__swatch--free"></span>
+    <span class="octomap-2d-pgm__legend-text">可走</span>
+    <span class="octomap-2d-pgm__swatch octomap-2d-pgm__swatch--obstacle"></span>
+    <span class="octomap-2d-pgm__legend-text">障碍</span>
+    <span class="octomap-2d-pgm__swatch octomap-2d-pgm__swatch--inflated"></span>
+    <span class="octomap-2d-pgm__legend-text">碰撞膨胀</span>
+    <span class="octomap-2d-pgm__swatch octomap-2d-pgm__swatch--path"></span>
+    <span class="octomap-2d-pgm__legend-text">路径</span>
+    <span class="octomap-2d-pgm__swatch octomap-2d-pgm__swatch--stuck"></span>
+    <span class="octomap-2d-pgm__legend-text">走不通（残段 / 卡点）</span>
+    <span class="octomap-2d-pgm__swatch octomap-2d-pgm__swatch--start"></span>
+    <span class="octomap-2d-pgm__legend-text">起点（含足迹）</span>
+    <span class="octomap-2d-pgm__swatch octomap-2d-pgm__swatch--goal"></span>
+    <span class="octomap-2d-pgm__legend-text">终点</span>
 
-    <span class="pgm__hint">左键设起点，右键设终点，然后点「开始寻址」。{{ modeHint() }}</span>
+    <span class="octomap-2d-pgm__hint">左键设起点，右键设终点，然后点「开始寻址」。{{ modeHint() }}</span>
   </div>
 </section>
