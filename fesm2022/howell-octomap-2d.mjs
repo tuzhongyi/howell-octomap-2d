@@ -736,6 +736,27 @@ function pgmWorldToCell(grid, x, z) {
     }
     return (grid.height - 1 - zCell) * grid.width + col;
 }
+function planPgmImage(image, start, goal, options) {
+    const grid = buildPgmGrid(image, options);
+    const startCell = toPgmCell(image, grid, start);
+    const goalCell = toPgmCell(image, grid, goal);
+    const plan = planPgmPath(grid, startCell, goalCell, options.goalRadius, options.startSnapRadius, options.startClearance);
+    return { grid, plan };
+}
+function toPgmCell(image, grid, point) {
+    if ('col' in point) {
+        if (!(image.width > 0) || !(image.height > 0)) {
+            return null;
+        }
+        const col = Math.floor((point.col * grid.width) / image.width);
+        const row = Math.floor((point.row * grid.height) / image.height);
+        if (col < 0 || col >= grid.width || row < 0 || row >= grid.height) {
+            return null;
+        }
+        return row * grid.width + col;
+    }
+    return pgmWorldToCell(grid, point.x, point.z);
+}
 
 /**
  * 在一张 PGM 地图上做二维寻路。
@@ -1478,5 +1499,5 @@ function drawStuckCross(context, grid, cell) {
  * Generated bundle index. Do not edit.
  */
 
-export { OCTOMAP_PGM_DEFAULT_DOG_RADIUS, OCTOMAP_PGM_DEFAULT_GOAL_RADIUS, OCTOMAP_PGM_DEFAULT_RESOLUTION, OCTOMAP_PGM_MODE_LABELS, Octomap2dPgmComponent, PGM_DARK_MAX, PGM_FREE, PGM_FREE_MIN, PGM_OCCUPIED, buildPgmGrid, decodePgm, encodePgm, findPgmPath, inflateBlocked, pgmCellToWorld, pgmWorldToCell, planPgmPath, searchPgmPath, smoothPgmPath, snapToFree };
+export { OCTOMAP_PGM_DEFAULT_DOG_RADIUS, OCTOMAP_PGM_DEFAULT_GOAL_RADIUS, OCTOMAP_PGM_DEFAULT_RESOLUTION, OCTOMAP_PGM_MODE_LABELS, Octomap2dPgmComponent, PGM_DARK_MAX, PGM_FREE, PGM_FREE_MIN, PGM_OCCUPIED, buildPgmGrid, decodePgm, encodePgm, findPgmPath, inflateBlocked, pgmCellToWorld, pgmWorldToCell, planPgmImage, planPgmPath, searchPgmPath, smoothPgmPath, snapToFree };
 //# sourceMappingURL=howell-octomap-2d.mjs.map

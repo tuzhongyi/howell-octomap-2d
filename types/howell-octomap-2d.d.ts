@@ -421,7 +421,37 @@ declare function pgmCellToWorld(grid: OctomapPgmGrid, cell: number): [number, nu
  * 二维图上时，也必须遵守「第 0 行是 Z 最大」这一条。
  */
 declare function pgmWorldToCell(grid: OctomapPgmGrid, x: number, z: number): number | null;
+/**
+ * Headless 入口：图像 + 起点/终点 → 网格 + 规划结果。
+ *
+ * 不创建组件、不碰画布，适合宿主自己提供图片和端点、只取寻路结果。起点/终点可给：
+ *
+ * - 图像像素坐标 `{ col, row }`（row 0 是图像顶部）；
+ * - 世界坐标 `{ x, z }`（米，与 `path.world` 同一套）。
+ *
+ * 像素会按降采样后的网格尺寸换算；落在图外时 `plan.reason` 是 `noStart` / `noGoal`。
+ */
+interface OctomapPgmHeadlessOptions extends OctomapPgmPlanOptions {
+    /** 终点吸附范围（米）。 */
+    goalRadius: number;
+    /** 起点吸附范围（米）；默认同 `goalRadius`。 */
+    startSnapRadius?: number;
+    /** 起点要求的最小净空（米）；默认不额外要求。 */
+    startClearance?: number;
+}
+interface OctomapPgmHeadlessResult {
+    grid: OctomapPgmGrid;
+    plan: OctomapPgmPlan;
+}
+type OctomapPgmPoint = {
+    col: number;
+    row: number;
+} | {
+    x: number;
+    z: number;
+};
+declare function planPgmImage(image: OctomapProjection, start: OctomapPgmPoint, goal: OctomapPgmPoint, options: OctomapPgmHeadlessOptions): OctomapPgmHeadlessResult;
 
-export { OCTOMAP_PGM_DEFAULT_DOG_RADIUS, OCTOMAP_PGM_DEFAULT_GOAL_RADIUS, OCTOMAP_PGM_DEFAULT_RESOLUTION, OCTOMAP_PGM_MODE_LABELS, Octomap2dPgmComponent, PGM_DARK_MAX, PGM_FREE, PGM_FREE_MIN, PGM_OCCUPIED, buildPgmGrid, decodePgm, encodePgm, findPgmPath, inflateBlocked, pgmCellToWorld, pgmWorldToCell, planPgmPath, searchPgmPath, smoothPgmPath, snapToFree };
-export type { OctomapPgmFailure, OctomapPgmGrid, OctomapPgmMode, OctomapPgmPath, OctomapPgmPlan, OctomapPgmPlanOptions, OctomapPgmViewState, OctomapProjection, PgmSearchResult };
+export { OCTOMAP_PGM_DEFAULT_DOG_RADIUS, OCTOMAP_PGM_DEFAULT_GOAL_RADIUS, OCTOMAP_PGM_DEFAULT_RESOLUTION, OCTOMAP_PGM_MODE_LABELS, Octomap2dPgmComponent, PGM_DARK_MAX, PGM_FREE, PGM_FREE_MIN, PGM_OCCUPIED, buildPgmGrid, decodePgm, encodePgm, findPgmPath, inflateBlocked, pgmCellToWorld, pgmWorldToCell, planPgmImage, planPgmPath, searchPgmPath, smoothPgmPath, snapToFree };
+export type { OctomapPgmFailure, OctomapPgmGrid, OctomapPgmHeadlessOptions, OctomapPgmHeadlessResult, OctomapPgmMode, OctomapPgmPath, OctomapPgmPlan, OctomapPgmPlanOptions, OctomapPgmPoint, OctomapPgmViewState, OctomapProjection, PgmSearchResult };
 //# sourceMappingURL=howell-octomap-2d.d.ts.map
