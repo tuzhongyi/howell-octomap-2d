@@ -20,8 +20,8 @@ import {
   OctoMapPgmGrid,
   OctoMapPgmMode,
   OctoMapPgmPlan,
-} from './octo-map-pgm.model';
-import { buildPgmGrid, pgmCellToWorld, planPgmPath } from './octo-map-pgm-grid';
+} from './octomap-2d-pgm.model';
+import { buildPgmGrid, pgmCellToWorld, planPgmPath } from './octomap-2d-pgm-grid';
 
 /**
  * 在一张 PGM 地图上做二维寻路。
@@ -40,10 +40,10 @@ import { buildPgmGrid, pgmCellToWorld, planPgmPath } from './octo-map-pgm-grid';
  * 走不通时不只是报错：A* 记下能走到的最远处，面板和画布会标出卡在哪一格。
  */
 @Component({
-  selector: 'app-octo-map-pgm',
+  selector: 'howell-octomap-2d-pgm',
   imports: [],
-  templateUrl: './octo-map-pgm.component.html',
-  styleUrl: './octo-map-pgm.component.less',
+  templateUrl: './octomap-2d-pgm.component.html',
+  styleUrl: './octomap-2d-pgm.component.less',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class OctoMapPgmComponent implements OnChanges {

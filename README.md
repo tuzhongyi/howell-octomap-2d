@@ -20,7 +20,7 @@ peerDependencies 需要宿主自己安装：
 import { OctoMapPgmComponent, OctoMapProjection, decodePgm } from 'howell-octomap-2d';
 ```
 
-组件选择器：`app-octo-map-pgm`。`image` 输入是一张已解码的灰度图（用 `decodePgm` 把 PGM 文件转成 `OctoMapProjection`），`resolution` 指定一格多少米。
+组件选择器：`howell-octomap-2d-pgm`。`image` 输入是一张已解码的灰度图（用 `decodePgm` 把 PGM 文件转成 `OctoMapProjection`），`resolution` 指定一格多少米。
 
 ## 开发
 

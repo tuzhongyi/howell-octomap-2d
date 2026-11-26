@@ -4,7 +4,7 @@ import {
   OctoMapPgmPath,
   OctoMapPgmPlan,
   OctoMapPgmPlanOptions,
-} from './octo-map-pgm.model';
+} from './octomap-2d-pgm.model';
 
 /**
  * 平滑时一根弦最多跨多少格。
