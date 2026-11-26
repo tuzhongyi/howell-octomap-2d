@@ -218,6 +218,7 @@ declare class Octomap2dPgmComponent implements OnChanges {
     /** 每次「开始寻址」或清除时发出，供宿主显示或转交。 */
     readonly pathChange: EventEmitter<OctomapPgmPlan | null>;
     private readonly canvasRef;
+    private readonly viewportRef;
     /** 当前网格；`image` 为空、分辨率无效或建图失败时为空。 */
     protected readonly grid: _angular_core.WritableSignal<OctomapPgmGrid | null>;
     /** 用户点中的起点 / 终点格（吸附前的原始格）。 */
@@ -229,6 +230,13 @@ declare class Octomap2dPgmComponent implements OnChanges {
     private readonly markerSizeState;
     private readonly startSnapState;
     private readonly startClearanceState;
+    /** 只影响显示的缩放与平移，不参与建图/寻路。 */
+    private readonly scale;
+    private readonly translateX;
+    private readonly translateY;
+    protected readonly viewTransform: _angular_core.Signal<string>;
+    /** 正在按下的指针；超过阈值才算拖动，否则松开时是一次点击。 */
+    private drag;
     constructor();
     ngOnChanges(changes: SimpleChanges): void;
     /** 网格尺寸与分辨率，显示在工具条上。 */
@@ -247,6 +255,10 @@ declare class Octomap2dPgmComponent implements OnChanges {
     runSearch(): void;
     clearMarks(): void;
     protected onPointerDown(event: PointerEvent): void;
+    protected onPointerMove(event: PointerEvent): void;
+    protected onPointerUp(event: PointerEvent): void;
+    protected onPointerCancel(event: PointerEvent): void;
+    protected onWheel(event: WheelEvent): void;
     protected onContextMenu(event: MouseEvent): void;
     private rebuild;
     /** 清掉旧结果；没有结果时什么也不发。 */
