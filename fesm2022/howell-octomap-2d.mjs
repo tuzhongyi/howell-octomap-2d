@@ -294,6 +294,9 @@ function buildPgmGrid(image, options) {
         ? sourceBlocked
         : reduceBlocked(sourceBlocked, image.width, image.height, width, height, scale);
     const blocked = inflateBlocked(rawBlocked, width, height, options.dogRadius, resolution);
+    const base = scale === 1
+        ? image.data
+        : reduceBase(image.data, image.width, image.height, width, height, scale);
     return {
         width,
         height,
@@ -304,6 +307,7 @@ function buildPgmGrid(image, options) {
         dogRadius: options.dogRadius,
         rawBlocked,
         blocked,
+        base,
     };
 }
 /** 最小的整数倍，使降采样后的格数不超过 {@link MAX_PGM_CELLS}。 */
@@ -313,6 +317,33 @@ function downsampleScale(width, height) {
         scale++;
     }
     return scale;
+}
+/**
+ * 把 `scale × scale` 的像素块压成一格底图：取块内**最暗**的像素。
+ *
+ * 黑（有点/墙）在视觉上更值得保留；取最暗不会让细墙和稀疏点被白色稀释掉。
+ */
+function reduceBase(source, sourceWidth, sourceHeight, width, height, scale) {
+    const out = new Uint8Array(width * height);
+    for (let row = 0; row < height; row++) {
+        const rowStart = row * scale;
+        const rowEnd = Math.min(sourceHeight, rowStart + scale);
+        for (let col = 0; col < width; col++) {
+            const colStart = col * scale;
+            const colEnd = Math.min(sourceWidth, colStart + scale);
+            let darkest = 255;
+            for (let r = rowStart; r < rowEnd; r++) {
+                const base = r * sourceWidth;
+                for (let c = colStart; c < colEnd; c++) {
+                    if (source[base + c] < darkest) {
+                        darkest = source[base + c];
+                    }
+                }
+            }
+            out[row * width + col] = darkest;
+        }
+    }
+    return out;
 }
 /** 把 `scale × scale` 的像素块压成一格：块里只要有一个障碍，这一格就是障碍。 */
 function reduceBlocked(source, sourceWidth, sourceHeight, width, height, scale) {
@@ -1117,26 +1148,22 @@ class Octomap2dPgmComponent {
         }
         const image = context.createImageData(grid.width, grid.height);
         const data = image.data;
-        for (let i = 0; i < grid.blocked.length; i++) {
+        for (let i = 0; i < grid.base.length; i++) {
             const p = i * 4;
-            if (grid.rawBlocked[i] !== 0) {
-                // 原始障碍：深灰，不用纯黑——路径与端点要压在上面才看得清。
-                data[p] = 31;
-                data[p + 1] = 41;
-                data[p + 2] = 55;
+            const v = grid.base[i];
+            // 底图保持 PGM 原始灰度：切通行口径只改「哪些格算障碍」，不再翻转黑白。
+            let r = v;
+            let g = v;
+            let b = v;
+            if (grid.rawBlocked[i] === 0 && grid.blocked[i] !== 0) {
+                // 只因为碰撞半径而不可走的格子：叠一层半透明浅红，原图仍然透得出来。
+                r = Math.round(v * 0.55 + 254 * 0.45);
+                g = Math.round(v * 0.55 + 202 * 0.45);
+                b = Math.round(v * 0.55 + 202 * 0.45);
             }
-            else if (grid.blocked[i] !== 0) {
-                // 只因为碰撞半径而不可走的格子：浅红。调小半径时它会缩回去，用户能直接
-                // 看到「小狗的碰撞」在二维图上值多少格。
-                data[p] = 254;
-                data[p + 1] = 202;
-                data[p + 2] = 202;
-            }
-            else {
-                data[p] = 248;
-                data[p + 1] = 250;
-                data[p + 2] = 252;
-            }
+            data[p] = r;
+            data[p + 1] = g;
+            data[p + 2] = b;
             data[p + 3] = 255;
         }
         context.putImageData(image, 0, 0);
