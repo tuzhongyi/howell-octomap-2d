@@ -1,7 +1,7 @@
 {
   "name": "howell-octomap-2d",
   "version": "0.0.1",
-  "description": "OctoMap 二维寻路组件（PGM 占用图），Angular 组件库",
+  "description": "Octomap 二维寻路组件（PGM 占用图），Angular 组件库",
   "sideEffects": false,
   "peerDependencies": {
     "@angular/core": "^21.0.0"

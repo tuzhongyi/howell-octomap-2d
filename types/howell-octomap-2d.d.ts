@@ -6,7 +6,7 @@ import { OnChanges, EventEmitter, SimpleChanges } from '@angular/core';
  * map-server 惯用的 0（占用）/ 254（空闲）两档。
  */
 /** 单通道的俯视地图图像（兼容 PGM）。 */
-interface OctoMapProjection {
+interface OctomapProjection {
     width: number;
     height: number;
     /** 按行主序排列的像素：{@link PGM_OCCUPIED} 或 {@link PGM_FREE}。 */
@@ -41,15 +41,15 @@ declare const PGM_FREE_MIN = 250;
  * `resolution` 可省略；给了就写进注释行，读回来时可以自动恢复比例尺。PGM 标准
  * 没有这个字段，但注释行允许任意内容，看图的软件会忽略它。
  */
-declare function encodePgm(projection: OctoMapProjection, resolution?: number): Uint8Array<ArrayBuffer>;
+declare function encodePgm(projection: OctomapProjection, resolution?: number): Uint8Array<ArrayBuffer>;
 /**
  * 读入 PGM 文件（P2 文本 / P5 二进制），灰度统一归一化到 0..255。
  *
  * 只认 PGM 自己的头：宽、高、最大灰度。标准头里没有比例尺（map-server 把它放在
  * 同名 YAML 里）；本仓导出时把 `resolution=` 写进了注释行，读到就放进结果的
- * {@link OctoMapProjection.resolution}，读不到就留给宿主另给。
+ * {@link OctomapProjection.resolution}，读不到就留给宿主另给。
  */
-declare function decodePgm(buffer: ArrayBuffer): OctoMapProjection;
+declare function decodePgm(buffer: ArrayBuffer): OctomapProjection;
 
 /**
  * 在 PGM 地图上寻路时，「可走」取哪一层语义。
@@ -66,17 +66,17 @@ declare function decodePgm(buffer: ArrayBuffer): OctoMapProjection;
  * 原先还有一档「按高度分带」，它需要每个像素的最高点；PGM 不带高度，于是二维页
  * 只保留这两档。高度分带仍留在三维寻路那边。
  */
-type OctoMapPgmMode = 'occupiedWalkable' | 'freeWalkable';
+type OctomapPgmMode = 'occupiedWalkable' | 'freeWalkable';
 /** 两档口径在界面上的短名与说明。 */
-declare const OCTO_MAP_PGM_MODE_LABELS: Readonly<Record<OctoMapPgmMode, {
+declare const OCTOMAP_PGM_MODE_LABELS: Readonly<Record<OctomapPgmMode, {
     label: string;
     hint: string;
 }>>;
 /** PGM 文件头里没有比例尺，一格按多少米算由宿主指定；这是默认值。 */
-declare const OCTO_MAP_PGM_DEFAULT_RESOLUTION = 0.05;
+declare const OCTOMAP_PGM_DEFAULT_RESOLUTION = 0.05;
 /** 建一张二维导航网格需要的参数。 */
-interface OctoMapPgmPlanOptions {
-    mode: OctoMapPgmMode;
+interface OctomapPgmPlanOptions {
+    mode: OctomapPgmMode;
     /**
      * 小狗的碰撞半径（米），与三维寻路共用设置面板里那一项。
      *
@@ -88,7 +88,7 @@ interface OctoMapPgmPlanOptions {
     resolution: number;
 }
 /** 一张二维导航网格。行列按图像方向：`row = 0` 是 Z 最大的一侧。 */
-interface OctoMapPgmGrid {
+interface OctomapPgmGrid {
     width: number;
     height: number;
     /** 一格多宽（世界单位）。图像被降采样时已经乘过倍数。 */
@@ -106,20 +106,20 @@ interface OctoMapPgmGrid {
     blocked: Uint8Array;
 }
 /** 规划成功后的路径。 */
-interface OctoMapPgmPath {
+interface OctomapPgmPath {
     /** 拉直后的格索引（`row * width + col`），首尾是两个吸附后的端点。 */
     cells: number[];
-    /** 与 {@link cells} 一一对应的世界坐标，Y 取 {@link OctoMapPgmGrid.groundLevel}。 */
+    /** 与 {@link cells} 一一对应的世界坐标，Y 取 {@link OctomapPgmGrid.groundLevel}。 */
     world: [number, number, number][];
     /** 折线总长（米）。 */
     length: number;
 }
 /** 规划失败的原因。 */
-type OctoMapPgmFailure = 'noStart' | 'noGoal' | 'blockedStart' | 'blockedGoal' | 'unreachable';
+type OctomapPgmFailure = 'noStart' | 'noGoal' | 'blockedStart' | 'blockedGoal' | 'unreachable';
 /** 一次规划的完整结果。 */
-interface OctoMapPgmPlan {
-    path: OctoMapPgmPath | null;
-    reason: OctoMapPgmFailure | null;
+interface OctomapPgmPlan {
+    path: OctomapPgmPath | null;
+    reason: OctomapPgmFailure | null;
     /** 吸附后的起点格；没点过或格子为空时为 null。 */
     startCell: number | null;
     goalCell: number | null;
@@ -134,26 +134,26 @@ interface OctoMapPgmPlan {
      */
     stuckCell: number | null;
     /** 走不通时：从起点到 {@link stuckCell} 的残段（已拉直）；其他情况为 null。 */
-    partialPath: OctoMapPgmPath | null;
+    partialPath: OctomapPgmPath | null;
 }
 /**
  * 小狗碰撞半径的默认值（米）。
  *
  * 二维库不依赖三维库，所以这里保留与三维默认设置相同的数值（0.25 m）。
  */
-declare const OCTO_MAP_PGM_DEFAULT_DOG_RADIUS = 0.25;
+declare const OCTOMAP_PGM_DEFAULT_DOG_RADIUS = 0.25;
 /**
  * 终点范围的默认值（米）。
  *
  * 与三维默认设置相同（0.5 m）；起点吸附范围默认也取这个值。
  */
-declare const OCTO_MAP_PGM_DEFAULT_GOAL_RADIUS = 0.5;
+declare const OCTOMAP_PGM_DEFAULT_GOAL_RADIUS = 0.5;
 
 /**
  * 在一张 PGM 地图上做二维寻路。
  *
- * 输入是一张已经解码好的灰度图 {@link OctoMapProjection}，加一格多少米。建图、膨胀、
- * A*、拉直全在这个目录里，不碰 Three.js、不碰 octo-map 的三维控制器；宿主只负责
+ * 输入是一张已经解码好的灰度图 {@link OctomapProjection}，加一格多少米。建图、膨胀、
+ * A*、拉直全在这个目录里，不碰 Three.js、不碰 octomap 的三维控制器；宿主只负责
  * 把文件读成像素。这样同一份算法既能给 `/system/pgm` 的二维页用，也能在测试里直接
  * `new` 一个网格跑。
  *
@@ -167,7 +167,7 @@ declare const OCTO_MAP_PGM_DEFAULT_GOAL_RADIUS = 0.5;
  */
 declare class Octomap2dPgmComponent implements OnChanges {
     /** 要寻路的 PGM 图像；为空时只显示一句提示。 */
-    image: OctoMapProjection | null;
+    image: OctomapProjection | null;
     /** 一格对应多少米。PGM 文件头不带比例尺，只能由宿主给。 */
     resolution: number;
     /** 小狗碰撞半径（米），决定障碍往外膨胀多少。 */
@@ -181,21 +181,21 @@ declare class Octomap2dPgmComponent implements OnChanges {
      * 默认「黑格可走」，与本仓导出的 PGM 对齐：那里的黑 = 该列有点，正是小狗要走的
      * 地面；从 map-server 换来、墙画成黑色的地图在工具条上切到「白格可走」即可。
      */
-    mode: OctoMapPgmMode;
+    mode: OctomapPgmMode;
     /** 用户切换通行口径时发出。 */
-    readonly modeChange: EventEmitter<OctoMapPgmMode>;
+    readonly modeChange: EventEmitter<OctomapPgmMode>;
     /** 每次「开始寻址」或清除时发出，供宿主显示或转交。 */
-    readonly pathChange: EventEmitter<OctoMapPgmPlan | null>;
+    readonly pathChange: EventEmitter<OctomapPgmPlan | null>;
     private readonly canvasRef;
     /** 当前通行口径。输入只是初值，选择器改的是这个。 */
-    protected readonly activeMode: _angular_core.WritableSignal<OctoMapPgmMode>;
+    protected readonly activeMode: _angular_core.WritableSignal<OctomapPgmMode>;
     /** 当前网格；`image` 为空、分辨率无效或建图失败时为空。 */
-    protected readonly grid: _angular_core.WritableSignal<OctoMapPgmGrid | null>;
+    protected readonly grid: _angular_core.WritableSignal<OctomapPgmGrid | null>;
     /** 用户点中的起点 / 终点格（吸附前的原始格）。 */
     private readonly startCell;
     private readonly goalCell;
     /** 最近一次「开始寻址」的结果；null 表示还没算，或端点 / 参数已经改过。 */
-    protected readonly plan: _angular_core.WritableSignal<OctoMapPgmPlan | null>;
+    protected readonly plan: _angular_core.WritableSignal<OctomapPgmPlan | null>;
     /** 起点圆点半径（格）。只影响画出来的标记，不参与寻路。 */
     protected readonly markerSize: _angular_core.WritableSignal<number>;
     /** 起点吸附范围（米）：点中的起点不可走时，最多找这么远。默认跟终点范围一致。 */
@@ -212,7 +212,7 @@ declare class Octomap2dPgmComponent implements OnChanges {
     protected readonly modeOptions: {
         label: string;
         hint: string;
-        value: OctoMapPgmMode;
+        value: OctomapPgmMode;
     }[];
     /** 表单事件只放需要从 DOM 上取值的处理器。 */
     protected readonly on: {
@@ -282,7 +282,7 @@ declare class Octomap2dPgmComponent implements OnChanges {
  * 粒度的，障碍格心到自由格心的距离比「到真实障碍面」多出半格；补半格才能让
  * `blocked` 的边界大致落在真实障碍面上，而不是一律偏保守或偏激进。
  */
-declare function buildPgmGrid(image: OctoMapProjection, options: OctoMapPgmPlanOptions): OctoMapPgmGrid;
+declare function buildPgmGrid(image: OctomapProjection, options: OctomapPgmPlanOptions): OctomapPgmGrid;
 /**
  * 按小狗的碰撞半径把障碍往外扩。
  *
@@ -308,7 +308,7 @@ declare function inflateBlocked(rawBlocked: Uint8Array, width: number, height: n
  * 从起点到那一格的残段拉直后一并返回（`partialPath` / `stuckCell`），界面能把
  * 「走到哪里走不通」画出来。
  */
-declare function planPgmPath(grid: OctoMapPgmGrid, start: number | null, goal: number | null, goalRadius: number, startRadius?: number, startClearance?: number | null): OctoMapPgmPlan;
+declare function planPgmPath(grid: OctomapPgmGrid, start: number | null, goal: number | null, goalRadius: number, startRadius?: number, startClearance?: number | null): OctomapPgmPlan;
 /**
  * 找离 `cell` 最近的、膨胀后仍可通行的格。找不到（`maxCells` 之内全堵着）返回 -1。
  *
@@ -317,7 +317,7 @@ declare function planPgmPath(grid: OctoMapPgmGrid, start: number | null, goal: n
  * 有空格为止」——后者会把点进墙里的终点悄悄吸附到墙另一侧，画出一条用户没要求的
  * 路线。
  */
-declare function snapToFree(grid: OctoMapPgmGrid, cell: number, maxCells: number, blocked?: Uint8Array): number;
+declare function snapToFree(grid: OctomapPgmGrid, cell: number, maxCells: number, blocked?: Uint8Array): number;
 /** A* 的完整结果：走到终点时 `cells` 有值，走不到时只有残段与卡住的格。 */
 interface PgmSearchResult {
     /** 起点到终点的格序列（含首尾）；走不到为 null。 */
@@ -338,9 +338,9 @@ interface PgmSearchResult {
  * 对角移动要求两个正交邻居都可通行：否则路径会从两个对角相贴的障碍之间「挤」过去，
  * 画面上那条斜线正好穿过障碍的角，狗实际上过不去。
  */
-declare function searchPgmPath(grid: OctoMapPgmGrid, start: number, goal: number): PgmSearchResult;
+declare function searchPgmPath(grid: OctomapPgmGrid, start: number, goal: number): PgmSearchResult;
 /** 只关心「有没有路」的旧入口。 */
-declare function findPgmPath(grid: OctoMapPgmGrid, start: number, goal: number): number[] | null;
+declare function findPgmPath(grid: OctomapPgmGrid, start: number, goal: number): number[] | null;
 /**
  * 把 A* 的逐格折线拉直：从当前顶点尽量往前跳，只要两点之间的直线不碰障碍。
  *
@@ -348,7 +348,7 @@ declare function findPgmPath(grid: OctoMapPgmGrid, start: number, goal: number):
  * 于是折线会带出左右翻号的锯齿。拉直不改变「能不能走」——它只删掉中间那些本来
  * 就落在同一条无碰直线上的顶点——但会让小狗少拐很多次头。
  */
-declare function smoothPgmPath(grid: OctoMapPgmGrid, cells: number[]): number[];
+declare function smoothPgmPath(grid: OctomapPgmGrid, cells: number[]): number[];
 /**
  * 格索引 → 世界坐标（格心）。
  *
@@ -356,15 +356,15 @@ declare function smoothPgmPath(grid: OctoMapPgmGrid, cells: number[]): number[];
  * `height - 1 - row` 再加半格。Y 取地面高度——二维规划不产生高度，路径就画在那个
  * 平面上。
  */
-declare function pgmCellToWorld(grid: OctoMapPgmGrid, cell: number): [number, number, number];
+declare function pgmCellToWorld(grid: OctomapPgmGrid, cell: number): [number, number, number];
 /**
  * 世界坐标 (X, Z) → 格索引；落在网格之外返回 null。
  *
  * 这是 {@link pgmCellToWorld} 的逆。宿主（导航页）拿它把三维视图里的位置换算到
  * 二维图上时，也必须遵守「第 0 行是 Z 最大」这一条。
  */
-declare function pgmWorldToCell(grid: OctoMapPgmGrid, x: number, z: number): number | null;
+declare function pgmWorldToCell(grid: OctomapPgmGrid, x: number, z: number): number | null;
 
-export { OCTO_MAP_PGM_DEFAULT_DOG_RADIUS, OCTO_MAP_PGM_DEFAULT_GOAL_RADIUS, OCTO_MAP_PGM_DEFAULT_RESOLUTION, OCTO_MAP_PGM_MODE_LABELS, Octomap2dPgmComponent, PGM_DARK_MAX, PGM_FREE, PGM_FREE_MIN, PGM_OCCUPIED, buildPgmGrid, decodePgm, encodePgm, findPgmPath, inflateBlocked, pgmCellToWorld, pgmWorldToCell, planPgmPath, searchPgmPath, smoothPgmPath, snapToFree };
-export type { OctoMapPgmFailure, OctoMapPgmGrid, OctoMapPgmMode, OctoMapPgmPath, OctoMapPgmPlan, OctoMapPgmPlanOptions, OctoMapProjection, PgmSearchResult };
+export { OCTOMAP_PGM_DEFAULT_DOG_RADIUS, OCTOMAP_PGM_DEFAULT_GOAL_RADIUS, OCTOMAP_PGM_DEFAULT_RESOLUTION, OCTOMAP_PGM_MODE_LABELS, Octomap2dPgmComponent, PGM_DARK_MAX, PGM_FREE, PGM_FREE_MIN, PGM_OCCUPIED, buildPgmGrid, decodePgm, encodePgm, findPgmPath, inflateBlocked, pgmCellToWorld, pgmWorldToCell, planPgmPath, searchPgmPath, smoothPgmPath, snapToFree };
+export type { OctomapPgmFailure, OctomapPgmGrid, OctomapPgmMode, OctomapPgmPath, OctomapPgmPlan, OctomapPgmPlanOptions, OctomapProjection, PgmSearchResult };
 //# sourceMappingURL=howell-octomap-2d.d.ts.map

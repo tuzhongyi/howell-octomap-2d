@@ -2,7 +2,7 @@ import * as i0 from '@angular/core';
 import { EventEmitter, viewChild, signal, effect, Output, Input, ChangeDetectionStrategy, Component } from '@angular/core';
 
 /** 两档口径在界面上的短名与说明。 */
-const OCTO_MAP_PGM_MODE_LABELS = {
+const OCTOMAP_PGM_MODE_LABELS = {
     occupiedWalkable: {
         label: '黑格可走',
         hint: '黑色（有点）可走，白色是障碍；碰撞半径从白色一侧往里让。',
@@ -13,19 +13,19 @@ const OCTO_MAP_PGM_MODE_LABELS = {
     },
 };
 /** PGM 文件头里没有比例尺，一格按多少米算由宿主指定；这是默认值。 */
-const OCTO_MAP_PGM_DEFAULT_RESOLUTION = 0.05;
+const OCTOMAP_PGM_DEFAULT_RESOLUTION = 0.05;
 /**
  * 小狗碰撞半径的默认值（米）。
  *
  * 二维库不依赖三维库，所以这里保留与三维默认设置相同的数值（0.25 m）。
  */
-const OCTO_MAP_PGM_DEFAULT_DOG_RADIUS = 0.25;
+const OCTOMAP_PGM_DEFAULT_DOG_RADIUS = 0.25;
 /**
  * 终点范围的默认值（米）。
  *
  * 与三维默认设置相同（0.5 m）；起点吸附范围默认也取这个值。
  */
-const OCTO_MAP_PGM_DEFAULT_GOAL_RADIUS = 0.5;
+const OCTOMAP_PGM_DEFAULT_GOAL_RADIUS = 0.5;
 
 /**
  * 俯视地图的 PGM 编解码器：写出的是二进制 (P5)，读入兼容 P2 / P5，灰度使用
@@ -69,7 +69,7 @@ function encodePgm(projection, resolution) {
  *
  * 只认 PGM 自己的头：宽、高、最大灰度。标准头里没有比例尺（map-server 把它放在
  * 同名 YAML 里）；本仓导出时把 `resolution=` 写进了注释行，读到就放进结果的
- * {@link OctoMapProjection.resolution}，读不到就留给宿主另给。
+ * {@link OctomapProjection.resolution}，读不到就留给宿主另给。
  */
 function decodePgm(buffer) {
     const bytes = new Uint8Array(buffer);
@@ -709,8 +709,8 @@ function pgmWorldToCell(grid, x, z) {
 /**
  * 在一张 PGM 地图上做二维寻路。
  *
- * 输入是一张已经解码好的灰度图 {@link OctoMapProjection}，加一格多少米。建图、膨胀、
- * A*、拉直全在这个目录里，不碰 Three.js、不碰 octo-map 的三维控制器；宿主只负责
+ * 输入是一张已经解码好的灰度图 {@link OctomapProjection}，加一格多少米。建图、膨胀、
+ * A*、拉直全在这个目录里，不碰 Three.js、不碰 octomap 的三维控制器；宿主只负责
  * 把文件读成像素。这样同一份算法既能给 `/system/pgm` 的二维页用，也能在测试里直接
  * `new` 一个网格跑。
  *
@@ -726,11 +726,11 @@ class Octomap2dPgmComponent {
     /** 要寻路的 PGM 图像；为空时只显示一句提示。 */
     image = null;
     /** 一格对应多少米。PGM 文件头不带比例尺，只能由宿主给。 */
-    resolution = OCTO_MAP_PGM_DEFAULT_RESOLUTION;
+    resolution = OCTOMAP_PGM_DEFAULT_RESOLUTION;
     /** 小狗碰撞半径（米），决定障碍往外膨胀多少。 */
-    dogRadius = OCTO_MAP_PGM_DEFAULT_DOG_RADIUS;
+    dogRadius = OCTOMAP_PGM_DEFAULT_DOG_RADIUS;
     /** 终点范围（米）：点中的格子不可通行时，最多吸附这么远。 */
-    goalRadius = OCTO_MAP_PGM_DEFAULT_GOAL_RADIUS;
+    goalRadius = OCTOMAP_PGM_DEFAULT_GOAL_RADIUS;
     /**
      * 初始通行口径。切换之后由组件自己记（并发出 {@link modeChange}）；父组件再改
      * 这个输入会覆盖当前选择。
@@ -756,17 +756,17 @@ class Octomap2dPgmComponent {
     /** 起点圆点半径（格）。只影响画出来的标记，不参与寻路。 */
     markerSize = signal(10, ...(ngDevMode ? [{ debugName: "markerSize" }] : /* istanbul ignore next */ []));
     /** 起点吸附范围（米）：点中的起点不可走时，最多找这么远。默认跟终点范围一致。 */
-    startSnapRadius = signal(OCTO_MAP_PGM_DEFAULT_GOAL_RADIUS, ...(ngDevMode ? [{ debugName: "startSnapRadius" }] : /* istanbul ignore next */ []));
+    startSnapRadius = signal(OCTOMAP_PGM_DEFAULT_GOAL_RADIUS, ...(ngDevMode ? [{ debugName: "startSnapRadius" }] : /* istanbul ignore next */ []));
     /**
      * 起点要求的最小净空（米）。比建图时的碰撞半径更严时，起点会被推到离障碍更远的
      * 格子上；小于等于 `dogRadius` 时不生效（路线本身仍按碰撞半径膨胀）。
      */
-    startClearance = signal(OCTO_MAP_PGM_DEFAULT_DOG_RADIUS, ...(ngDevMode ? [{ debugName: "startClearance" }] : /* istanbul ignore next */ []));
+    startClearance = signal(OCTOMAP_PGM_DEFAULT_DOG_RADIUS, ...(ngDevMode ? [{ debugName: "startClearance" }] : /* istanbul ignore next */ []));
     /** 面板里的值一旦被用户改过，就不要再被宿主的新输入或自动默认值覆盖。 */
     startRadiusTouched = false;
     clearanceTouched = false;
     markerTouched = false;
-    modeOptions = Object.keys(OCTO_MAP_PGM_MODE_LABELS).map((value) => ({ value, ...OCTO_MAP_PGM_MODE_LABELS[value] }));
+    modeOptions = Object.keys(OCTOMAP_PGM_MODE_LABELS).map((value) => ({ value, ...OCTOMAP_PGM_MODE_LABELS[value] }));
     /** 表单事件只放需要从 DOM 上取值的处理器。 */
     on = {
         mode: (event) => {
@@ -824,7 +824,7 @@ class Octomap2dPgmComponent {
     }
     /** 当前口径的说明，显示在图例旁边。 */
     modeHint() {
-        return OCTO_MAP_PGM_MODE_LABELS[this.activeMode()].hint;
+        return OCTOMAP_PGM_MODE_LABELS[this.activeMode()].hint;
     }
     /** 网格尺寸与分辨率，显示在工具条上。 */
     gridInfo() {
@@ -1251,5 +1251,5 @@ function drawStuckCross(context, grid, cell) {
  * Generated bundle index. Do not edit.
  */
 
-export { OCTO_MAP_PGM_DEFAULT_DOG_RADIUS, OCTO_MAP_PGM_DEFAULT_GOAL_RADIUS, OCTO_MAP_PGM_DEFAULT_RESOLUTION, OCTO_MAP_PGM_MODE_LABELS, Octomap2dPgmComponent, PGM_DARK_MAX, PGM_FREE, PGM_FREE_MIN, PGM_OCCUPIED, buildPgmGrid, decodePgm, encodePgm, findPgmPath, inflateBlocked, pgmCellToWorld, pgmWorldToCell, planPgmPath, searchPgmPath, smoothPgmPath, snapToFree };
+export { OCTOMAP_PGM_DEFAULT_DOG_RADIUS, OCTOMAP_PGM_DEFAULT_GOAL_RADIUS, OCTOMAP_PGM_DEFAULT_RESOLUTION, OCTOMAP_PGM_MODE_LABELS, Octomap2dPgmComponent, PGM_DARK_MAX, PGM_FREE, PGM_FREE_MIN, PGM_OCCUPIED, buildPgmGrid, decodePgm, encodePgm, findPgmPath, inflateBlocked, pgmCellToWorld, pgmWorldToCell, planPgmPath, searchPgmPath, smoothPgmPath, snapToFree };
 //# sourceMappingURL=howell-octomap-2d.mjs.map
