@@ -117,3 +117,23 @@ export const OCTOMAP_PGM_DEFAULT_DOG_RADIUS = 0.25;
  * 与三维默认设置相同（0.5 m）；起点吸附范围默认也取这个值。
  */
 export const OCTOMAP_PGM_DEFAULT_GOAL_RADIUS = 0.5;
+
+/**
+ * 组件对外的只读状态快照。
+ *
+ * 二维组件本身不画设置面板；宿主（比如 test 的 `d2-settings`）读这个快照来显示
+ * 网格信息、起终点读数、状态文字和实际生效的起点圆点大小。`markerSize` 为 `null`
+ * 时表示组件按地图尺寸自动取值。
+ */
+export interface OctomapPgmViewState {
+  grid: { width: number; height: number; resolution: number } | null;
+  startCell: number | null;
+  goalCell: number | null;
+  plan: OctomapPgmPlan | null;
+  canSearch: boolean;
+  gridInfo: string | null;
+  startText: string;
+  goalText: string;
+  status: string;
+  markerSize: number | null;
+}

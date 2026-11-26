@@ -16,10 +16,10 @@ import {
   OCTOMAP_PGM_DEFAULT_DOG_RADIUS,
   OCTOMAP_PGM_DEFAULT_GOAL_RADIUS,
   OCTOMAP_PGM_DEFAULT_RESOLUTION,
-  OCTOMAP_PGM_MODE_LABELS,
   OctomapPgmGrid,
   OctomapPgmMode,
   OctomapPgmPlan,
+  OctomapPgmViewState,
 } from './octomap-2d-pgm.model';
 import { buildPgmGrid, pgmCellToWorld, planPgmPath } from './octomap-2d-pgm-grid';
 
@@ -35,9 +35,11 @@ import { buildPgmGrid, pgmCellToWorld, planPgmPath } from './octomap-2d-pgm-grid
  * 决定终点歪了之后最多吸附多远。二维平面里没有高度与天花板，`maxStepHeight` /
  * `dogHeight` 不参与判定。
  *
- * 交互：左键设起点、右键设终点；**点了「开始寻址」才计算**。点完两个端点后路线不会
- * 自己冒出来，调参数也不会悄悄重算——参数改过就把旧结果清掉，让用户知道该再点一次。
- * 走不通时不只是报错：A* 记下能走到的最远处，面板和画布会标出卡在哪一格。
+ * 交互：左键设起点、右键设终点；**宿主调用 {@link runSearch} 才计算**。组件本身不画
+ * 工具条或设置面板——那些在宿主里（test 的 `d2-settings`）。组件只负责画布、交互、
+ * 建图与寻路，并通过 {@link viewState} 暴露只读状态给宿主显示。参数改过就把旧结果
+ * 清掉，让用户知道该再点一次。走不通时不只是报错：A* 记下能走到的最远处，画布会标出
+ * 卡在哪一格。
  */
 @Component({
   selector: 'howell-octomap-2d-pgm',
@@ -60,24 +62,29 @@ export class Octomap2dPgmComponent implements OnChanges {
   @Input() goalRadius: number = OCTOMAP_PGM_DEFAULT_GOAL_RADIUS;
 
   /**
-   * 初始通行口径。切换之后由组件自己记（并发出 {@link modeChange}）；父组件再改
-   * 这个输入会覆盖当前选择。
+   * 通行口径。由宿主拥有；父组件改这个输入会重建网格。
    *
    * 默认「黑格可走」，与本仓导出的 PGM 对齐：那里的黑 = 该列有点，正是小狗要走的
-   * 地面；从 map-server 换来、墙画成黑色的地图在工具条上切到「白格可走」即可。
+   * 地面；从 map-server 换来、墙画成黑色的地图在宿主里切到「白格可走」即可。
    */
   @Input() mode: OctomapPgmMode = 'occupiedWalkable';
 
-  /** 用户切换通行口径时发出。 */
-  @Output() readonly modeChange = new EventEmitter<OctomapPgmMode>();
+  /** 起点圆点半径（格）。null 表示按地图短边自动取值。 */
+  @Input() markerSize: number | null = null;
+
+  /** 起点吸附范围（米）：点中的起点不可走时，最多找这么远。 */
+  @Input() startSnapRadius: number = OCTOMAP_PGM_DEFAULT_GOAL_RADIUS;
+
+  /**
+   * 起点要求的最小净空（米）。比建图时的碰撞半径更严时，起点会被推到离障碍更远的
+   * 格子上；小于等于 `dogRadius` 时不生效（路线本身仍按碰撞半径膨胀）。
+   */
+  @Input() startClearance: number = OCTOMAP_PGM_DEFAULT_DOG_RADIUS;
 
   /** 每次「开始寻址」或清除时发出，供宿主显示或转交。 */
   @Output() readonly pathChange = new EventEmitter<OctomapPgmPlan | null>();
 
   private readonly canvasRef = viewChild<ElementRef<HTMLCanvasElement>>('canvas');
-
-  /** 当前通行口径。输入只是初值，选择器改的是这个。 */
-  protected readonly activeMode = signal<OctomapPgmMode>('occupiedWalkable');
 
   /** 当前网格；`image` 为空、分辨率无效或建图失败时为空。 */
   protected readonly grid = signal<OctomapPgmGrid | null>(null);
@@ -89,49 +96,15 @@ export class Octomap2dPgmComponent implements OnChanges {
   /** 最近一次「开始寻址」的结果；null 表示还没算，或端点 / 参数已经改过。 */
   protected readonly plan = signal<OctomapPgmPlan | null>(null);
 
-  /** 起点圆点半径（格）。只影响画出来的标记，不参与寻路。 */
-  protected readonly markerSize = signal(10);
-
-  /** 起点吸附范围（米）：点中的起点不可走时，最多找这么远。默认跟终点范围一致。 */
-  protected readonly startSnapRadius = signal(OCTOMAP_PGM_DEFAULT_GOAL_RADIUS);
-
-  /**
-   * 起点要求的最小净空（米）。比建图时的碰撞半径更严时，起点会被推到离障碍更远的
-   * 格子上；小于等于 `dogRadius` 时不生效（路线本身仍按碰撞半径膨胀）。
-   */
-  protected readonly startClearance = signal(OCTOMAP_PGM_DEFAULT_DOG_RADIUS);
-
-  /** 面板里的值一旦被用户改过，就不要再被宿主的新输入或自动默认值覆盖。 */
-  private startRadiusTouched = false;
-  private clearanceTouched = false;
-  private markerTouched = false;
-
-  protected readonly modeOptions = (
-    Object.keys(OCTOMAP_PGM_MODE_LABELS) as OctomapPgmMode[]
-  ).map((value) => ({ value, ...OCTOMAP_PGM_MODE_LABELS[value] }));
-
-  /** 表单事件只放需要从 DOM 上取值的处理器。 */
-  protected readonly on = {
-    mode: (event: Event): void => {
-      this.setMode((event.target as HTMLSelectElement).value);
-    },
-    markerSize: (event: Event): void => {
-      this.markerTouched = true;
-      this.markerSize.set(readNumber(event, this.markerSize(), 1));
-    },
-    startSnapRadius: (event: Event): void => {
-      this.startRadiusTouched = true;
-      this.startSnapRadius.set(readNumber(event, this.startSnapRadius(), 0));
-      this.clearPlan();
-    },
-    startClearance: (event: Event): void => {
-      this.clearanceTouched = true;
-      this.startClearance.set(readNumber(event, this.startClearance(), 0));
-      this.clearPlan();
-    },
-  };
+  /** 设置输入的状态镜像；用信号驱动重绘与对外快照。 */
+  private readonly markerSizeState = signal<number | null>(null);
+  private readonly startSnapState = signal(OCTOMAP_PGM_DEFAULT_GOAL_RADIUS);
+  private readonly startClearanceState = signal(OCTOMAP_PGM_DEFAULT_DOG_RADIUS);
 
   constructor() {
+    this.markerSizeState.set(this.markerSize);
+    this.startSnapState.set(this.startSnapRadius);
+    this.startClearanceState.set(this.startClearance);
     effect(() => this.draw());
   }
 
@@ -143,34 +116,27 @@ export class Octomap2dPgmComponent implements OnChanges {
       this.goalCell.set(null);
       rebuild = true;
     }
-    if (changes['mode']) {
-      this.activeMode.set(this.mode);
-      rebuild = true;
-    }
-    if (changes['dogRadius']) {
-      if (!this.clearanceTouched) {
-        this.startClearance.set(this.dogRadius);
-      }
-      rebuild = true;
-    }
-    if (changes['resolution']) {
+    if (changes['mode'] || changes['dogRadius'] || changes['resolution']) {
       rebuild = true;
     }
     if (changes['goalRadius']) {
-      if (!this.startRadiusTouched) {
-        this.startSnapRadius.set(this.goalRadius);
-      }
       // 终点范围参与规划，换了就得重算，旧结果不能留。
       this.clearPlan();
+    }
+    if (changes['startSnapRadius']) {
+      this.startSnapState.set(this.startSnapRadius);
+      this.clearPlan();
+    }
+    if (changes['startClearance']) {
+      this.startClearanceState.set(this.startClearance);
+      this.clearPlan();
+    }
+    if (changes['markerSize']) {
+      this.markerSizeState.set(this.markerSize);
     }
     if (rebuild) {
       this.rebuild();
     }
-  }
-
-  /** 当前口径的说明，显示在图例旁边。 */
-  protected modeHint(): string {
-    return OCTOMAP_PGM_MODE_LABELS[this.activeMode()].hint;
   }
 
   /** 网格尺寸与分辨率，显示在工具条上。 */
@@ -219,7 +185,7 @@ export class Octomap2dPgmComponent implements OnChanges {
       case 'noGoal':
         return '右键在图上点一下设终点。';
       case 'blockedStart':
-        return `起点附近 ${this.startSnapRadius().toFixed(2)} m 内没有${this.clearanceHint()}可通行的格子。`;
+        return `起点附近 ${this.startSnapState().toFixed(2)} m 内没有${this.clearanceHint()}可通行的格子。`;
       case 'blockedGoal':
         return `终点附近 ${this.goalRadius.toFixed(2)} m 内没有可通行的格子。`;
       case 'unreachable':
@@ -241,18 +207,27 @@ export class Octomap2dPgmComponent implements OnChanges {
     return '';
   }
 
-  protected setMode(value: string): void {
-    const mode = value as OctomapPgmMode;
-    if (mode === this.activeMode()) {
-      return;
-    }
-    this.activeMode.set(mode);
-    this.modeChange.emit(mode);
-    this.rebuild();
+  /** 只读状态快照；宿主设置面板用。 */
+  viewState(): OctomapPgmViewState {
+    const grid = this.grid();
+    return {
+      grid: grid
+        ? { width: grid.width, height: grid.height, resolution: grid.resolution }
+        : null,
+      startCell: this.startCell(),
+      goalCell: this.goalCell(),
+      plan: this.plan(),
+      canSearch: this.canSearch(),
+      gridInfo: this.gridInfo(),
+      startText: this.startText(),
+      goalText: this.goalText(),
+      status: this.statusText(),
+      markerSize: this.markerSizeState() ?? (grid ? autoMarkerSize(grid) : null),
+    };
   }
 
   /** 用户按下「开始寻址」：这时才真的跑一次规划。 */
-  protected runSearch(): void {
+  runSearch(): void {
     const grid = this.grid();
     if (!grid) {
       return;
@@ -262,14 +237,14 @@ export class Octomap2dPgmComponent implements OnChanges {
       this.startCell(),
       this.goalCell(),
       this.goalRadius,
-      this.startSnapRadius(),
-      this.startClearance(),
+      this.startSnapState(),
+      this.startClearanceState(),
     );
     this.plan.set(plan);
     this.pathChange.emit(plan);
   }
 
-  protected clearMarks(): void {
+  clearMarks(): void {
     this.startCell.set(null);
     this.goalCell.set(null);
     this.clearPlan();
@@ -311,15 +286,11 @@ export class Octomap2dPgmComponent implements OnChanges {
       return;
     }
     const grid = buildPgmGrid(image, {
-      mode: this.activeMode(),
+      mode: this.mode,
       dogRadius: this.dogRadius,
       resolution: this.resolution,
     });
     this.grid.set(grid);
-    if (!this.markerTouched) {
-      // 默认圆点跟着地图大小走：小图不至于糊住起点，大图也不至于看不见。
-      this.markerSize.set(autoMarkerSize(grid));
-    }
   }
 
   /** 清掉旧结果；没有结果时什么也不发。 */
@@ -343,7 +314,7 @@ export class Octomap2dPgmComponent implements OnChanges {
 
   /** 起点净空比碰撞半径更严时，失败提示里说明是哪一套口径卡住了。 */
   private clearanceHint(): string {
-    return this.startClearance() > this.dogRadius ? '满足起点净空的' : '';
+    return this.startClearanceState() > this.dogRadius ? '满足起点净空的' : '';
   }
 
   /** 走不通时的一句话：最远到哪、还差多远、残段多长。 */
@@ -499,8 +470,8 @@ export class Octomap2dPgmComponent implements OnChanges {
         grid,
         plan?.startCell ?? start,
         '#16a34a',
-        this.startClearance(),
-        this.markerSize(),
+        this.startClearanceState(),
+        this.markerSizeState() ?? autoMarkerSize(grid),
       );
     }
     if (goal !== null) {
@@ -516,17 +487,6 @@ export class Octomap2dPgmComponent implements OnChanges {
 /** 「起点大小」的自动值：短边的 1/120，与原来固定圆点的观感一致。 */
 function autoMarkerSize(grid: OctomapPgmGrid): number {
   return Math.max(1, Math.round(Math.min(grid.width, grid.height) / 120));
-}
-
-/** 从输入框里读一个有限的非负数；非法时回填 `fallback`，并且不改信号。 */
-function readNumber(event: Event, fallback: number, min: number): number {
-  const input = event.target as HTMLInputElement;
-  const value = Number(input.value);
-  if (!Number.isFinite(value) || value < min) {
-    input.value = String(fallback);
-    return fallback;
-  }
-  return value;
 }
 
 /** 格索引序列 → 画布上的格心坐标（1 格 = 1 像素）。 */

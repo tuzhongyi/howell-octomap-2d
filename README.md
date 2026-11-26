@@ -22,6 +22,13 @@ import { Octomap2dPgmComponent, OctomapProjection, decodePgm } from 'howell-octo
 
 组件选择器：`howell-octomap-2d-pgm`。`image` 输入是一张已解码的灰度图（用 `decodePgm` 把 PGM 文件转成 `OctomapProjection`），`resolution` 指定一格多少米。
 
+二维组件**只负责画布与寻路逻辑，不带设置界面**：
+
+- 输入：`image`、`resolution`、`dogRadius`、`goalRadius`、`mode`、`markerSize`、`startSnapRadius`、`startClearance`
+- 方法：`runSearch()`、`clearMarks()`、`viewState()`
+- `viewState()` 返回 `OctomapPgmViewState`（网格、起终点、状态文案、实际圆点大小），宿主据此画自己的设置面板
+- 左键设起点、右键设终点；算路由宿主调用 `runSearch()`
+
 ## 开发
 
 ```bash
